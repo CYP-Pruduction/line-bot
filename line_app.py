@@ -304,8 +304,8 @@ def handle_text_message(event):
                     user_states[user_id] = {}
             flex_message = create_select_activity_and_datetime_flex(event.source.user_id)
             request = ReplyMessageRequest(
-                reply_token=event.reply_token,
-                messages=[flex_message]
+                 reply_token=event.reply_token,
+                 messages=[flex_message]
             )
             response = messaging_api.reply_message(request)
             with user_states_lock:
@@ -339,33 +339,32 @@ def get_user_profile(user_id):
         logger.error(f"Error getting user profile: {e}")
         return "未知用戶"
 
-@handler.add(PostbackEvent)
 def handle_postback(event):
     try:
         user_id = event.source.user_id
         data = event.postback.data
 
         if "action=select_activity" in data:
+            temp_message_id = None
             with user_states_lock:
                 activity_name = data.split('&name=')[1]
                 if user_id not in user_states:
                     user_states[user_id] = {}
                 if user_states[user_id].get('name') == activity_name:
-                   user_states[user_id].pop('name', None)
+                    user_states[user_id].pop('name', None)
                 else:
                    user_states[user_id]['name'] = activity_name
-                message_id = user_states[user_id].get('message_id')
+                temp_message_id = user_states[user_id].get('message_id')
 
-            if message_id:
-                flex_message = create_select_activity_and_datetime_flex(user_id)
-                messaging_api.update_message(message_id=message_id, message=flex_message)
+            if temp_message_id:
+                 flex_message = create_select_activity_and_datetime_flex(user_id)
+                 messaging_api.update_message(message_id=temp_message_id, message=flex_message)
             else:
                 request = ReplyMessageRequest(
                     reply_token=event.reply_token,
                     messages=[TextMessage(text="發生錯誤，請重新輸入+副本")]
                 )
                 messaging_api.reply_message(request)
-
 
         elif "action=select_date" in data:
             with user_states_lock:
