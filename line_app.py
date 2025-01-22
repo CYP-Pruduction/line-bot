@@ -40,6 +40,7 @@ api_client = ApiClient(configuration)
 messaging_api = MessagingApi(api_client)
 handler = WebhookHandler(channel_secret)
 
+
 # Database Models
 class Activity(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -79,7 +80,7 @@ def create_activity_name_input():
             "contents": [
                 {
                     "type": "text",
-                    "text": "建立新活動",
+                    "text": "建立新副本",
                     "weight": "bold",
                     "size": "xl",
                     "color": "#1DB446"
@@ -90,14 +91,14 @@ def create_activity_name_input():
                 },
                 {
                     "type": "text",
-                    "text": "請輸入活動名稱",
+                    "text": "請輸入副本名稱",
                     "margin": "lg"
                 }
             ]
         }
     }
     return FlexMessage(
-        alt_text="輸入活動名稱",
+        alt_text="輸入副本名稱",
         contents=FlexContainer.from_dict(flex_content)
     )
 
@@ -111,7 +112,7 @@ def create_datetime_picker_flex():
             "contents": [
                 {
                     "type": "text",
-                    "text": "選擇活動時間",
+                    "text": "選擇副本時間",
                     "weight": "bold",
                     "size": "xl",
                     "color": "#1DB446"
@@ -135,106 +136,12 @@ def create_datetime_picker_flex():
         }
     }
     return FlexMessage(
-        alt_text="選擇活動時間",
+        alt_text="選擇副本時間",
         contents=FlexContainer.from_dict(flex_content)
     )
 
 
 def create_activities_list_flex():
-    activities = Activity.query.all()
-
-    if not activities:
-        return TextMessage(text="目前沒有任何活動")
-
-    contents = []
-    for activity in activities:
-        # 活動資訊
-        activity_info = [
-            {
-                "type": "text",
-                "text": activity.name,
-                "weight": "bold",
-                "size": "lg"
-            },
-            {
-                "type": "text",
-                "text": f"時間: {activity.datetime}",
-                "size": "sm"
-            },
-            {
-                "type": "text",
-                "text": f"參加人數: {len(activity.participants)}",
-                "size": "sm"
-            }
-        ]
-
-        # 按鈕列
-        buttons = {
-            "type": "box",
-            "layout": "horizontal",
-            "margin": "sm",
-            "spacing": "sm",
-            "contents": [
-                {
-                    "type": "button",
-                    "style": "primary",
-                    "height": "sm",
-                    "flex": 2,  # 調整為更大的 flex 值
-                    "adjustMode": "shrink-to-fit",  # 添加自動調整模式
-                    "action": {
-                        "type": "postback",
-                        "label": "報名",
-                        "data": f"action=join_activity&id={activity.id}"
-                    }
-                },
-                {
-                    "type": "button",
-                    "style": "secondary",
-                    "height": "sm",
-                    "flex": 2,
-                    "adjustMode": "shrink-to-fit",
-                    "action": {
-                        "type": "postback",
-                        "label": "取消",
-                        "data": f"action=cancel_join&id={activity.id}"
-                    }
-                },
-                {
-                    "type": "button",
-                    "style": "secondary",
-                    "height": "sm",
-                    "flex": 2,
-                    "adjustMode": "shrink-to-fit",
-                    "action": {
-                        "type": "postback",
-                        "label": "名單",
-                        "data": f"action=view_participants&id={activity.id}"
-                    }
-                },
-                {
-                    "type": "button",
-                    "style": "link",
-                    "height": "sm",
-                    "flex": 2,
-                    "adjustMode": "shrink-to-fit",
-                    "color": "#dc3545",
-                    "action": {
-                        "type": "postback",
-                        "label": "移除",
-                        "data": f"action=delete_activity&id={activity.id}"
-                    }
-                }
-            ]
-        }
-
-        # 將活動信息和按鈕組合在一起
-        contents.append({
-            "type": "box",
-            "layout": "vertical",
-            "margin": "lg",
-            "contents": activity_info + [buttons]
-        })
-
     flex_content = {
         "type": "bubble",
         "body": {
@@ -243,7 +150,7 @@ def create_activities_list_flex():
             "contents": [
                 {
                     "type": "text",
-                    "text": "活動列表",
+                    "text": "選擇副本類型",
                     "weight": "bold",
                     "size": "xl",
                     "color": "#1DB446"
@@ -251,12 +158,43 @@ def create_activities_list_flex():
                 {
                     "type": "separator",
                     "margin": "lg"
+                },
+                {
+                    "type": "button",
+                    "style": "primary",
+                    "margin": "md",
+                    "action": {
+                        "type": "postback",
+                        "label": "舞陽城",
+                        "data": "action=select_activity&name=舞陽城"
+                    }
+                },
+                {
+                    "type": "button",
+                    "style": "primary",
+                    "margin": "md",
+                    "action": {
+                        "type": "postback",
+                        "label": "劍夢武林",
+                        "data": "action=select_activity&name=劍夢武林"
+                    }
+                },
+                {
+                    "type": "button",
+                    "style": "primary",
+                    "margin": "md",
+                    "action": {
+                        "type": "datetimepicker",
+                        "label": "選擇日期時間",
+                        "data": "action=select_date",
+                        "mode": "datetime"
+                    }
                 }
-            ] + contents
+            ]
         }
     }
     return FlexMessage(
-        alt_text="活動列表",
+        alt_text="選擇副本類型",
         contents=FlexContainer.from_dict(flex_content)
     )
 
@@ -272,42 +210,6 @@ def callback():
     return 'OK'
 
 
-@handler.add(MessageEvent, message=TextMessageContent)
-def handle_text_message(event):
-    try:
-        user_id = event.source.user_id
-        text = event.message.text
-
-        if text.startswith("活動 "):
-            activity_name = text[3:].strip()
-            if activity_name:
-                user_states[user_id] = {
-                    'step': 'datetime',
-                    'name': activity_name
-                }
-                request = ReplyMessageRequest(
-                    reply_token=event.reply_token,
-                    messages=[create_datetime_picker_flex()]
-                )
-                messaging_api.reply_message(request)
-            else:
-                request = ReplyMessageRequest(
-                    reply_token=event.reply_token,
-                    messages=[TextMessage(text="請輸入活動名稱，例如：活動 副本")]
-                )
-                messaging_api.reply_message(request)
-
-        elif text == "活動":
-            request = ReplyMessageRequest(
-                reply_token=event.reply_token,
-                messages=[create_activities_list_flex()]
-            )
-            messaging_api.reply_message(request)
-
-    except Exception as e:
-        logger.error(f"Error: {e}")
-
-
 def get_user_profile(user_id):
     """獲取 LINE 用戶資料"""
     try:
@@ -316,6 +218,7 @@ def get_user_profile(user_id):
     except Exception as e:
         logger.error(f"Error getting user profile: {e}")
         return "未知用戶"
+
 
 @handler.add(MessageEvent, message=TextMessageContent)
 def handle_text_message(event):
@@ -327,51 +230,40 @@ def handle_text_message(event):
             help_text = (
                 "📝 指令說明\n"
                 "-------------------\n"
-                "1. 建立活動：\n"
-                "➜ 活動 [活動名稱]\n"
-                "例如：活動 打牌\n\n"
-                "2. 查看活動列表：\n"
-                "➜ 活動\n\n"
-                "3. 活動功能：\n"
-                "➜ 報名 - 參加活動\n"
+                "1. 建立副本：\n"
+                "➜ +副本\n"
+                "例如：+副本\n\n"
+                "2. 查看副本列表：\n"
+                "➜ 副本\n\n"
+                "3. 副本功能：\n"
+                "➜ 報名 - 參加副本\n"
                 "➜ 取消 - 取消報名\n"
                 "➜ 名單 - 查看報名名單\n"
-                "➜ 移除 - 刪除活動(限創建者)\n"
+                "➜ 移除 - 刪除副本(限創建者)\n"
             )
             request = ReplyMessageRequest(
                 reply_token=event.reply_token,
                 messages=[TextMessage(text=help_text)]
             )
             messaging_api.reply_message(request)
-
-        elif text.startswith("活動 "):
-            activity_name = text[3:].strip()
-            if activity_name:
-                user_states[user_id] = {
-                    'step': 'datetime',
-                    'name': activity_name
-                }
-                request = ReplyMessageRequest(
-                    reply_token=event.reply_token,
-                    messages=[create_datetime_picker_flex()]
-                )
-                messaging_api.reply_message(request)
-            else:
-                request = ReplyMessageRequest(
-                    reply_token=event.reply_token,
-                    messages=[TextMessage(text="請輸入活動名稱，例如：活動 副本")]
-                )
-                messaging_api.reply_message(request)
-
-        elif text == "活動":
+        elif text == "+副本":
+            user_states[user_id] = {'step': 'select_activity'}
+            request = ReplyMessageRequest(
+                reply_token=event.reply_token,
+                messages=[create_activities_list_flex()]
+            )
+            messaging_api.reply_message(request)
+        elif text == "副本":
             request = ReplyMessageRequest(
                 reply_token=event.reply_token,
                 messages=[create_activities_list_flex()]
             )
             messaging_api.reply_message(request)
 
+
     except Exception as e:
         logger.error(f"Error: {e}")
+
 
 @handler.add(PostbackEvent)
 def handle_postback(event):
@@ -379,7 +271,19 @@ def handle_postback(event):
         user_id = event.source.user_id
         data = event.postback.data
 
-        if "action=select_date" in data:
+        if "action=select_activity" in data:
+            activity_name = data.split('&name=')[1]
+            user_states[user_id] = {
+                'step': 'datetime',
+                'name': activity_name
+            }
+            request = ReplyMessageRequest(
+                reply_token=event.reply_token,
+                messages=[create_datetime_picker_flex()]
+            )
+            messaging_api.reply_message(request)
+
+        elif "action=select_date" in data:
             if user_id in user_states and user_states[user_id]['step'] == 'datetime':
                 new_activity = Activity(
                     name=user_states[user_id]['name'],
@@ -391,8 +295,8 @@ def handle_postback(event):
 
                 confirmation_text = (
                     f"建立成功(•ᴗ•)\n"
-                    f"活動名稱：{new_activity.name}\n"
-                    f"活動時間：{new_activity.datetime}"
+                    f"副本名稱：{new_activity.name}\n"
+                    f"副本時間：{new_activity.datetime}"
                 )
 
                 request = ReplyMessageRequest(
@@ -428,7 +332,7 @@ def handle_postback(event):
 
                     response_text = (
                         f"➜{activity.name}：{user_name} 已成功報名\n"
-                        f"活動時間：{activity.datetime}\n"
+                        f"副本時間：{activity.datetime}\n"
                         f"參加人數：{len(activity.participants)}"
                     )
 
@@ -498,7 +402,7 @@ def handle_postback(event):
 
                 response_text = (
                     f"➜{activity.name} 報名名單\n"
-                    f"活動時間：{activity.datetime}\n"
+                    f"副本時間：{activity.datetime}\n"
                     f"參加人數：{len(activity.participants)}人\n"
                     f"-----------------\n"
                     f"{participant_list}"
@@ -514,15 +418,15 @@ def handle_postback(event):
         logger.error(f"Error: {e}")
 
 
-
 # 修改初始化數據庫的函數
 def init_db():
     with app.app_context():
         db.create_all()
         print("Database initialized")
 
+
 if __name__ == "__main__":
     with app.app_context():
-       init_db()
+        init_db()
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port)
