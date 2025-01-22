@@ -13,6 +13,7 @@ from linebot.v3.messaging import (
 import logging
 from datetime import datetime
 import os
+import asyncio
 
 app = Flask(__name__)
 
@@ -68,6 +69,15 @@ async def get_user_profile(user_id):
     except Exception as e:
         logger.error(f"Error getting user profile: {e}")
         return "未知用戶"
+
+def run_async(coro):
+    """協助執行非同步函數的輔助函數"""
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    try:
+        return loop.run_until_complete(coro)
+    finally:
+        loop.close()
 
 
 def create_activity_name_input():
@@ -485,31 +495,14 @@ def handle_text_message(event):
     except Exception as e:
         logger.error(f"Error: {e}")
 
+
 @handler.add(PostbackEvent)
 def handle_postback(event):
     try:
         user_id = event.source.user_id
         data = event.postback.data
 
-        if "action=select_date" in data:
-            if user_id in user_states and user_states[user_id]['step'] == 'datetime':
-                new_activity = Activity(
-                    name=user_states[user_id]['name'],
-                    datetime=event.postback.params['datetime'],
-                    creator_id=user_id
-                )
-                db.session.add(new_activity)
-                db.session.commit()
-
-                request = ReplyMessageRequest(
-                    reply_token=event.reply_token,
-                    messages=[create_activities_list_flex()]
-                )
-                messaging_api.reply_message(request)
-
-                del user_states[user_id]
-
-        elif "action=join_activity" in data:
+        if "action=join_activity" in data:
             activity_id = int(data.split('&id=')[1])
             activity = Activity.query.get(activity_id)
 
@@ -519,10 +512,8 @@ def handle_postback(event):
                     user_id=user_id
                 ).first()
 
-                try:
-                    user_name = get_user_profile(user_id)
-                except:
-                    user_name = "未知用戶"
+                # 使用 run_async 來獲取用戶名稱
+                user_name = run_async(get_user_profile(user_id))
 
                 if existing_participant:
                     response_text = f"➜{activity.name}：{user_name} 已報名"
@@ -559,7 +550,8 @@ def handle_postback(event):
                 user_id=user_id
             ).first()
 
-            user_name = get_user_profile(user_id)
+            # 使用 run_async 來獲取用戶名稱
+            user_name = run_async(get_user_profile(user_id))
 
             if participant:
                 activity_name = participant.activity.name
