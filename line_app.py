@@ -308,7 +308,7 @@ def handle_text_message(event):
             )
             response = messaging_api.reply_message(request)
             with user_states_lock:
-                user_states[user_id]['message_id'] = response.json().get('messages')[0].get('id')
+               user_states[user_id]['message_id'] = response.json().get('messages')[0].get('id')
         elif text == "副本":
             request = ReplyMessageRequest(
                 reply_token=event.reply_token,
@@ -354,9 +354,9 @@ def handle_postback(event):
                 else:
                     user_states[user_id]['name'] = activity_name
                 message_id = user_states[user_id].get('message_id')
-                if message_id:
-                     flex_message = create_select_activity_and_datetime_flex(user_id)
-                     messaging_api.update_message(message_id=message_id, message=flex_message)
+            if message_id:
+                flex_message = create_select_activity_and_datetime_flex(user_id)
+                messaging_api.update_message(message_id=message_id, message=flex_message)
 
 
         elif "action=select_date" in data:
