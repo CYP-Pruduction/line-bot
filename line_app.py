@@ -142,6 +142,100 @@ def create_datetime_picker_flex():
 
 
 def create_activities_list_flex():
+    activities = Activity.query.all()
+
+    if not activities:
+        return TextMessage(text="目前沒有任何活動")
+
+    contents = []
+    for activity in activities:
+        # 活動資訊
+        activity_info = [
+            {
+                "type": "text",
+                "text": activity.name,
+                "weight": "bold",
+                "size": "lg"
+            },
+            {
+                "type": "text",
+                "text": f"時間: {activity.datetime}",
+                "size": "sm"
+            },
+            {
+                "type": "text",
+                "text": f"參加人數: {len(activity.participants)}",
+                "size": "sm"
+            }
+        ]
+
+        # 按鈕列
+        buttons = {
+            "type": "box",
+            "layout": "horizontal",
+            "margin": "sm",
+            "spacing": "sm",
+            "contents": [
+                {
+                    "type": "button",
+                    "style": "primary",
+                    "height": "sm",
+                    "flex": 2,  # 調整為更大的 flex 值
+                    "adjustMode": "shrink-to-fit",  # 添加自動調整模式
+                    "action": {
+                        "type": "postback",
+                        "label": "報名",
+                        "data": f"action=join_activity&id={activity.id}"
+                    }
+                },
+                {
+                    "type": "button",
+                    "style": "secondary",
+                    "height": "sm",
+                    "flex": 2,
+                    "adjustMode": "shrink-to-fit",
+                    "action": {
+                        "type": "postback",
+                        "label": "取消",
+                        "data": f"action=cancel_join&id={activity.id}"
+                    }
+                },
+                {
+                    "type": "button",
+                    "style": "secondary",
+                    "height": "sm",
+                    "flex": 2,
+                    "adjustMode": "shrink-to-fit",
+                    "action": {
+                        "type": "postback",
+                        "label": "名單",
+                        "data": f"action=view_participants&id={activity.id}"
+                    }
+                },
+                {
+                    "type": "button",
+                    "style": "link",
+                    "height": "sm",
+                    "flex": 2,
+                    "adjustMode": "shrink-to-fit",
+                    "color": "#dc3545",
+                    "action": {
+                        "type": "postback",
+                        "label": "移除",
+                        "data": f"action=delete_activity&id={activity.id}"
+                    }
+                }
+            ]
+        }
+
+        # 將活動信息和按鈕組合在一起
+        contents.append({
+            "type": "box",
+            "layout": "vertical",
+            "margin": "lg",
+            "contents": activity_info + [buttons]
+        })
+
     flex_content = {
         "type": "bubble",
         "body": {
@@ -150,7 +244,7 @@ def create_activities_list_flex():
             "contents": [
                 {
                     "type": "text",
-                    "text": "選擇副本類型",
+                    "text": "活動列表",
                     "weight": "bold",
                     "size": "xl",
                     "color": "#1DB446"
@@ -158,43 +252,12 @@ def create_activities_list_flex():
                 {
                     "type": "separator",
                     "margin": "lg"
-                },
-                {
-                    "type": "button",
-                    "style": "primary",
-                    "margin": "md",
-                    "action": {
-                        "type": "postback",
-                        "label": "舞陽城",
-                        "data": "action=select_activity&name=舞陽城"
-                    }
-                },
-                {
-                    "type": "button",
-                    "style": "primary",
-                    "margin": "md",
-                    "action": {
-                        "type": "postback",
-                        "label": "劍夢武林",
-                        "data": "action=select_activity&name=劍夢武林"
-                    }
-                },
-                {
-                    "type": "button",
-                    "style": "primary",
-                    "margin": "md",
-                    "action": {
-                        "type": "datetimepicker",
-                        "label": "選擇日期時間",
-                        "data": "action=select_date",
-                        "mode": "datetime"
-                    }
                 }
-            ]
+            ] + contents
         }
     }
     return FlexMessage(
-        alt_text="選擇副本類型",
+        alt_text="活動列表",
         contents=FlexContainer.from_dict(flex_content)
     )
 
