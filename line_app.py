@@ -138,6 +138,7 @@ def create_select_activity_and_datetime_flex(user_id):
     )
 
 
+
 def create_activities_list_flex():
     activities = Activity.query.all()
 
@@ -289,6 +290,7 @@ def handle_text_message(event):
                 "➜ 取消 - 取消報名\n"
                 "➜ 名單 - 查看報名名單\n"
                 "➜ 移除 - 刪除副本(限創建者)\n"
+                "clear_all\n"
             )
             request = ReplyMessageRequest(
                 reply_token=event.reply_token,
@@ -296,20 +298,35 @@ def handle_text_message(event):
             )
             messaging_api.reply_message(request)
         elif text == "+副本":
-             request = ReplyMessageRequest(
+            flex_message = create_select_activity_and_datetime_flex(event.source.user_id)
+            request = ReplyMessageRequest(
                  reply_token=event.reply_token,
-                 messages=[create_select_activity_and_datetime_flex(event.source.user_id)]
-             )
-             messaging_api.reply_message(request)
+                 messages=[flex_message]
+            )
+            response = messaging_api.reply_message(request)
+            if user_id not in user_states:
+               user_states[user_id] = {}
+            user_states[user_id]['message_id'] = response.json().get('messages')[0].get('id')
         elif text == "副本":
             request = ReplyMessageRequest(
                 reply_token=event.reply_token,
                 messages=[create_activities_list_flex()]
             )
             messaging_api.reply_message(request)
+        elif text == "clear_all":
+            with app.app_context():
+                Participant.query.delete()
+                Activity.query.delete()
+                db.session.commit()
+            request = ReplyMessageRequest(
+                 reply_token=event.reply_token,
+                 messages=[TextMessage(text="副本清單已清空")]
+            )
+            messaging_api.reply_message(request)
 
     except Exception as e:
         logger.error(f"Error: {e}")
+
 
 
 def get_user_profile(user_id):
@@ -335,11 +352,17 @@ def handle_postback(event):
                 user_states[user_id].pop('name',None)
              else:
                 user_states[user_id]['name'] = activity_name
-             request = ReplyMessageRequest(
-                 reply_token=event.reply_token,
-                 messages=[create_select_activity_and_datetime_flex(user_id)]
-             )
-             messaging_api.reply_message(request)
+             message_id = user_states[user_id].get('message_id')
+             if message_id:
+                flex_message = create_select_activity_and_datetime_flex(user_id)
+                messaging_api.update_message(message_id = message_id, message=flex_message)
+             else:
+                 request = ReplyMessageRequest(
+                    reply_token=event.reply_token,
+                    messages=[TextMessage(text="發生錯誤，請重新輸入+副本")]
+                )
+                 messaging_api.reply_message(request)
+
 
         elif "action=select_date" in data:
             if user_id in user_states and 'name' in user_states[user_id]:
