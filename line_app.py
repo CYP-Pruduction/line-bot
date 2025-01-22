@@ -519,7 +519,10 @@ def handle_postback(event):
                     user_id=user_id
                 ).first()
 
-                user_name = get_user_profile(user_id)
+                try:
+                    user_name = get_user_profile(user_id)
+                except:
+                    user_name = "未知用戶"
 
                 if existing_participant:
                     response_text = f"➜{activity.name}：{user_name} 已報名"
