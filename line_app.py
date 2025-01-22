@@ -40,7 +40,6 @@ api_client = ApiClient(configuration)
 messaging_api = MessagingApi(api_client)
 handler = WebhookHandler(channel_secret)
 
-
 # Database Models
 class Activity(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -71,7 +70,7 @@ async def get_user_profile(user_id):
         return "未知用戶"
 
 
-def create_activity_name_input():
+def create_select_activity_name_flex():
     flex_content = {
         "type": "bubble",
         "body": {
@@ -90,15 +89,38 @@ def create_activity_name_input():
                     "margin": "lg"
                 },
                 {
-                    "type": "text",
-                    "text": "請輸入副本名稱",
-                    "margin": "lg"
+                    "type": "box",
+                    "layout": "horizontal",
+                    "margin": "md",
+                    "spacing": "sm",
+                    "contents": [
+                        {
+                            "type": "button",
+                            "style": "primary",
+                             "flex": 1,
+                            "action": {
+                                "type": "postback",
+                                "label": "舞陽城",
+                                "data": "action=select_activity&name=舞陽城"
+                            }
+                         },
+                        {
+                             "type": "button",
+                             "style": "primary",
+                             "flex": 1,
+                             "action": {
+                                "type": "postback",
+                                "label": "劍夢武林",
+                                "data": "action=select_activity&name=劍夢武林"
+                            }
+                         }
+                    ]
                 }
             ]
         }
     }
     return FlexMessage(
-        alt_text="輸入副本名稱",
+        alt_text="選擇副本名稱",
         contents=FlexContainer.from_dict(flex_content)
     )
 
@@ -145,11 +167,11 @@ def create_activities_list_flex():
     activities = Activity.query.all()
 
     if not activities:
-        return TextMessage(text="目前沒有任何活動")
+        return TextMessage(text="目前沒有任何副本")
 
     contents = []
     for activity in activities:
-        # 活動資訊
+        # 副本資訊
         activity_info = [
             {
                 "type": "text",
@@ -228,7 +250,7 @@ def create_activities_list_flex():
             ]
         }
 
-        # 將活動信息和按鈕組合在一起
+        # 將副本信息和按鈕組合在一起
         contents.append({
             "type": "box",
             "layout": "vertical",
@@ -244,7 +266,7 @@ def create_activities_list_flex():
             "contents": [
                 {
                     "type": "text",
-                    "text": "活動列表",
+                    "text": "副本列表",
                     "weight": "bold",
                     "size": "xl",
                     "color": "#1DB446"
@@ -257,7 +279,7 @@ def create_activities_list_flex():
         }
     }
     return FlexMessage(
-        alt_text="活動列表",
+        alt_text="副本列表",
         contents=FlexContainer.from_dict(flex_content)
     )
 
@@ -273,16 +295,6 @@ def callback():
     return 'OK'
 
 
-def get_user_profile(user_id):
-    """獲取 LINE 用戶資料"""
-    try:
-        profile = messaging_api.get_profile(user_id)
-        return profile.display_name
-    except Exception as e:
-        logger.error(f"Error getting user profile: {e}")
-        return "未知用戶"
-
-
 @handler.add(MessageEvent, message=TextMessageContent)
 def handle_text_message(event):
     try:
@@ -294,11 +306,10 @@ def handle_text_message(event):
                 "📝 指令說明\n"
                 "-------------------\n"
                 "1. 建立副本：\n"
-                "➜ +副本\n"
-                "例如：+副本\n\n"
+                "➜ +副本\n\n"
                 "2. 查看副本列表：\n"
                 "➜ 副本\n\n"
-                "3. 副本功能：\n"
+                 "3. 副本功能：\n"
                 "➜ 報名 - 參加副本\n"
                 "➜ 取消 - 取消報名\n"
                 "➜ 名單 - 查看報名名單\n"
@@ -310,12 +321,12 @@ def handle_text_message(event):
             )
             messaging_api.reply_message(request)
         elif text == "+副本":
-            user_states[user_id] = {'step': 'select_activity'}
-            request = ReplyMessageRequest(
-                reply_token=event.reply_token,
-                messages=[create_datetime_picker_flex]
-            )
-            messaging_api.reply_message(request)
+             user_states[user_id] = {'step': 'select_activity'}
+             request = ReplyMessageRequest(
+                 reply_token=event.reply_token,
+                 messages=[create_select_activity_name_flex()]
+             )
+             messaging_api.reply_message(request)
         elif text == "副本":
             request = ReplyMessageRequest(
                 reply_token=event.reply_token,
@@ -323,13 +334,21 @@ def handle_text_message(event):
             )
             messaging_api.reply_message(request)
 
-
     except Exception as e:
         logger.error(f"Error: {e}")
 
 
+def get_user_profile(user_id):
+    """獲取 LINE 用戶資料"""
+    try:
+        profile = messaging_api.get_profile(user_id)
+        return profile.display_name
+    except Exception as e:
+        logger.error(f"Error getting user profile: {e}")
+        return "未知用戶"
+
 @handler.add(PostbackEvent)
-def handle_postback(event):
+async def handle_postback(event):
     try:
         user_id = event.source.user_id
         data = event.postback.data
@@ -379,8 +398,7 @@ def handle_postback(event):
                     activity_id=activity_id,
                     user_id=user_id
                 ).first()
-
-                user_name = get_user_profile(user_id)
+                user_name = await get_user_profile(user_id)  # 修改處
 
                 if existing_participant:
                     response_text = f"➜{activity.name}：{user_name} 已報名"
@@ -392,7 +410,6 @@ def handle_postback(event):
                     )
                     db.session.add(new_participant)
                     db.session.commit()
-
                     response_text = (
                         f"➜{activity.name}：{user_name} 已成功報名\n"
                         f"副本時間：{activity.datetime}\n"
@@ -417,7 +434,7 @@ def handle_postback(event):
                 user_id=user_id
             ).first()
 
-            user_name = get_user_profile(user_id)
+            user_name = await get_user_profile(user_id)  # 修改處
 
             if participant:
                 activity_name = participant.activity.name
@@ -445,7 +462,7 @@ def handle_postback(event):
                     db.session.commit()
                     response_text = f"➜{activity_name}：已刪除"
                 else:
-                    user_name = get_user_profile(user_id)
+                    user_name = await get_user_profile(user_id)  # 修改處
                     response_text = f"➜{activity.name}：{user_name} 無刪除權限"
 
                 request = ReplyMessageRequest(
@@ -462,7 +479,6 @@ def handle_postback(event):
                 participant_list = '\n'.join([
                     f"✓ {p.user_name}" for p in activity.participants
                 ])
-
                 response_text = (
                     f"➜{activity.name} 報名名單\n"
                     f"副本時間：{activity.datetime}\n"
@@ -470,7 +486,6 @@ def handle_postback(event):
                     f"-----------------\n"
                     f"{participant_list}"
                 )
-
                 request = ReplyMessageRequest(
                     reply_token=event.reply_token,
                     messages=[TextMessage(text=response_text)]
@@ -480,16 +495,14 @@ def handle_postback(event):
     except Exception as e:
         logger.error(f"Error: {e}")
 
-
 # 修改初始化數據庫的函數
 def init_db():
     with app.app_context():
         db.create_all()
         print("Database initialized")
 
-
 if __name__ == "__main__":
     with app.app_context():
-        init_db()
+       init_db()
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port)
