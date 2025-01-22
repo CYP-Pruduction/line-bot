@@ -32,8 +32,8 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # LINE Bot 設定從環境變數獲取
-channel_access_token = os.environ.get('nR1GyV3iM4++spRCmeC/sEJ5a5/Wzkj+Q6NU2kyXk6kN5CibV/GM1dIv7wnAsdpSpCGwtF3pATTS3djBL383BXWu/j14eK6/OE/2T5eSMw1im+3g1im+3wuWyRxa6sKHbmyF2IlUVcobnmpkVp/GYAdB04t89/1O/w1cDnyilFU=')
-channel_secret = os.environ.get('0353634f9bb47f754199ed7fc712b377')
+channel_access_token = os.environ.get('LINE_CHANNEL_ACCESS_TOKEN')
+channel_secret = os.environ.get('LINE_CHANNEL_SECRET')
 
 configuration = Configuration(access_token=channel_access_token)
 api_client = ApiClient(configuration)
