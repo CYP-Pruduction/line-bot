@@ -13,7 +13,6 @@ from linebot.v3.messaging import (
 import logging
 from datetime import datetime
 import os
-import threading
 
 app = Flask(__name__)
 
@@ -59,21 +58,19 @@ class Participant(db.Model):
 
 # 使用者狀態追蹤
 user_states = {}
-user_states_lock = threading.Lock()
 
-def get_user_profile(user_id):
+
+async def get_user_profile(user_id):
     """獲取 LINE 用戶資料"""
     try:
-        profile = messaging_api.get_profile(user_id)
+        profile = await messaging_api.get_profile(user_id)
         return profile.display_name
     except Exception as e:
         logger.error(f"Error getting user profile: {e}")
         return "未知用戶"
 
 
-def create_select_activity_and_datetime_flex(user_id):
-    selected_activity = user_states.get(user_id, {}).get('name', None)
-
+def create_activity_name_input():
     flex_content = {
         "type": "bubble",
         "body": {
@@ -91,33 +88,37 @@ def create_select_activity_and_datetime_flex(user_id):
                     "type": "separator",
                     "margin": "lg"
                 },
-                 {
-                    "type": "box",
-                    "layout": "horizontal",
-                    "margin": "md",
-                    "spacing": "sm",
-                    "contents": [
-                        {
-                            "type": "button",
-                            "style": "secondary" if selected_activity == "舞陽城" else "primary",
-                             "flex": 1,
-                            "action": {
-                                "type": "postback",
-                                "label": f"{'✓ ' if selected_activity == '舞陽城' else ''}舞陽城",
-                                "data": "action=select_activity&name=舞陽城"
-                            }
-                         },
-                        {
-                             "type": "button",
-                             "style": "secondary" if selected_activity == "劍夢武林" else "primary",
-                             "flex": 1,
-                             "action": {
-                                "type": "postback",
-                                "label": f"{'✓ ' if selected_activity == '劍夢武林' else ''}劍夢武林",
-                                "data": "action=select_activity&name=劍夢武林"
-                            }
-                         }
-                    ]
+                {
+                    "type": "text",
+                    "text": "請輸入副本名稱",
+                    "margin": "lg"
+                }
+            ]
+        }
+    }
+    return FlexMessage(
+        alt_text="輸入副本名稱",
+        contents=FlexContainer.from_dict(flex_content)
+    )
+
+
+def create_datetime_picker_flex():
+    flex_content = {
+        "type": "bubble",
+        "body": {
+            "type": "box",
+            "layout": "vertical",
+            "contents": [
+                {
+                    "type": "text",
+                    "text": "選擇副本時間",
+                    "weight": "bold",
+                    "size": "xl",
+                    "color": "#1DB446"
+                },
+                {
+                    "type": "separator",
+                    "margin": "lg"
                 },
                 {
                     "type": "button",
@@ -134,10 +135,9 @@ def create_select_activity_and_datetime_flex(user_id):
         }
     }
     return FlexMessage(
-        alt_text="選擇副本名稱和時間",
+        alt_text="選擇副本時間",
         contents=FlexContainer.from_dict(flex_content)
     )
-
 
 
 def create_activities_list_flex():
@@ -271,6 +271,103 @@ def callback():
         logger.error(f"Error: {e}")
     return 'OK'
 
+
+@handler.add(MessageEvent, message=TextMessageContent)
+def handle_text_message(event):
+    try:
+        user_id = event.source.user_id
+        text = event.message.text
+
+        if text == "刪除所有副本":
+            confirmation_message = FlexMessage(
+                alt_text="確認刪除所有副本？",
+                contents=FlexContainer.from_dict({
+                   "type": "bubble",
+                    "body": {
+                        "type": "box",
+                        "layout": "vertical",
+                         "contents": [
+                            {
+                                "type": "text",
+                                "text": "確認刪除所有副本？",
+                                "weight": "bold",
+                                "size": "xl",
+                                "align": "center"
+                            },
+                             {
+                                "type": "separator",
+                                "margin": "lg"
+                            },
+                            {
+                                "type": "box",
+                                "layout": "horizontal",
+                                "margin": "md",
+                                "spacing": "sm",
+                                "contents": [
+                                    {
+                                        "type": "button",
+                                        "style": "primary",
+                                        "height": "sm",
+                                         "action": {
+                                            "type": "postback",
+                                            "label": "是",
+                                            "data": "action=confirm_delete_all"
+                                            }
+                                    },
+                                    {
+                                         "type": "button",
+                                         "style": "secondary",
+                                         "height": "sm",
+                                         "action": {
+                                              "type": "postback",
+                                              "label": "否",
+                                              "data": "action=cancel_delete_all"
+                                          }
+                                    }
+                                ]
+                             }
+                         ]
+                     }
+                })
+            )
+            request = ReplyMessageRequest(
+                reply_token=event.reply_token,
+                messages=[confirmation_message]
+            )
+            messaging_api.reply_message(request)
+            return
+
+
+        if text.startswith("副本 "):
+            activity_name = text[3:].strip()
+            if activity_name:
+                user_states[user_id] = {
+                    'step': 'datetime',
+                    'name': activity_name
+                }
+                request = ReplyMessageRequest(
+                    reply_token=event.reply_token,
+                    messages=[create_datetime_picker_flex()]
+                )
+                messaging_api.reply_message(request)
+            else:
+                request = ReplyMessageRequest(
+                    reply_token=event.reply_token,
+                    messages=[TextMessage(text="請輸入副本名稱，例如：副本 副本")]
+                )
+                messaging_api.reply_message(request)
+
+        elif text == "副本":
+            request = ReplyMessageRequest(
+                reply_token=event.reply_token,
+                messages=[create_activities_list_flex()]
+            )
+            messaging_api.reply_message(request)
+
+    except Exception as e:
+        logger.error(f"Error: {e}")
+
+
 @handler.add(MessageEvent, message=TextMessageContent)
 def handle_text_message(event):
     try:
@@ -282,61 +379,111 @@ def handle_text_message(event):
                 "📝 指令說明\n"
                 "-------------------\n"
                 "1. 建立副本：\n"
-                "➜ +副本\n\n"
+                "➜ 副本 [副本名稱]\n"
+                "例如：副本 打牌\n\n"
                 "2. 查看副本列表：\n"
                 "➜ 副本\n\n"
-                 "3. 副本功能：\n"
+                "3. 副本功能：\n"
                 "➜ 報名 - 參加副本\n"
                 "➜ 取消 - 取消報名\n"
                 "➜ 名單 - 查看報名名單\n"
                 "➜ 移除 - 刪除副本(限創建者)\n"
-                "clear_all_activities\n"
+                "➜ 刪除所有副本 - 清空所有副本列表 (需確認)"
             )
             request = ReplyMessageRequest(
                 reply_token=event.reply_token,
                 messages=[TextMessage(text=help_text)]
             )
             messaging_api.reply_message(request)
-        elif text == "+副本":
-            with user_states_lock:
-                if user_id not in user_states:
-                    user_states[user_id] = {}
-            flex_message = create_select_activity_and_datetime_flex(event.source.user_id)
-            request = ReplyMessageRequest(
-                 reply_token=event.reply_token,
-                 messages=[flex_message]
+
+        elif text == "刪除所有副本":
+            confirmation_message = FlexMessage(
+                alt_text="確認刪除所有副本？",
+                contents=FlexContainer.from_dict({
+                   "type": "bubble",
+                    "body": {
+                        "type": "box",
+                        "layout": "vertical",
+                         "contents": [
+                            {
+                                "type": "text",
+                                "text": "確認刪除所有副本？",
+                                "weight": "bold",
+                                "size": "xl",
+                                "align": "center"
+                            },
+                             {
+                                "type": "separator",
+                                "margin": "lg"
+                            },
+                            {
+                                "type": "box",
+                                "layout": "horizontal",
+                                "margin": "md",
+                                "spacing": "sm",
+                                "contents": [
+                                    {
+                                        "type": "button",
+                                        "style": "primary",
+                                        "height": "sm",
+                                         "action": {
+                                            "type": "postback",
+                                            "label": "是",
+                                            "data": "action=confirm_delete_all"
+                                            }
+                                    },
+                                    {
+                                         "type": "button",
+                                         "style": "secondary",
+                                         "height": "sm",
+                                         "action": {
+                                              "type": "postback",
+                                              "label": "否",
+                                              "data": "action=cancel_delete_all"
+                                          }
+                                    }
+                                ]
+                             }
+                         ]
+                     }
+                })
             )
-            response = messaging_api.reply_message(request)
-            with user_states_lock:
-               user_states[user_id]['message_id'] = response.json().get('messages')[0].get('id')
+            request = ReplyMessageRequest(
+                reply_token=event.reply_token,
+                messages=[confirmation_message]
+            )
+            messaging_api.reply_message(request)
+            return
+
+
+        elif text.startswith("副本 "):
+            activity_name = text[3:].strip()
+            if activity_name:
+                user_states[user_id] = {
+                    'step': 'datetime',
+                    'name': activity_name
+                }
+                request = ReplyMessageRequest(
+                    reply_token=event.reply_token,
+                    messages=[create_datetime_picker_flex()]
+                )
+                messaging_api.reply_message(request)
+            else:
+                request = ReplyMessageRequest(
+                    reply_token=event.reply_token,
+                    messages=[TextMessage(text="請輸入副本名稱，例如：副本 副本")]
+                )
+                messaging_api.reply_message(request)
+
         elif text == "副本":
             request = ReplyMessageRequest(
                 reply_token=event.reply_token,
                 messages=[create_activities_list_flex()]
             )
             messaging_api.reply_message(request)
-        elif text == "clear_all_activities":
-            with app.app_context():
-                Participant.query.delete()
-                Activity.query.delete()
-                db.session.commit()
-            request = ReplyMessageRequest(
-                 reply_token=event.reply_token,
-                 messages=[TextMessage(text="副本清單已清空")]
-            )
-            messaging_api.reply_message(request)
 
     except Exception as e:
         logger.error(f"Error: {e}")
-
-def get_user_profile(user_id):
-    """獲取 LINE 用戶資料"""
-    try:
-        profile = messaging_api.get_profile(user_id)
-        return profile.display_name
-    except Exception as e:
-        logger.error(f"Error getting user profile: {e}")
-        return "未知用戶"
 
 @handler.add(PostbackEvent)
 def handle_postback(event):
@@ -344,46 +491,23 @@ def handle_postback(event):
         user_id = event.source.user_id
         data = event.postback.data
 
-        if "action=select_activity" in data:
-            with user_states_lock:
-                activity_name = data.split('&name=')[1]
-                if user_id not in user_states:
-                    user_states[user_id] = {}
-                if user_states[user_id].get('name') == activity_name:
-                    user_states[user_id].pop('name', None)
-                else:
-                    user_states[user_id]['name'] = activity_name
-                message_id = user_states[user_id].get('message_id')
-            if message_id:
-                flex_message = create_select_activity_and_datetime_flex(user_id)
-                messaging_api.update_message(message_id=message_id, message=flex_message)
+        if "action=select_date" in data:
+            if user_id in user_states and user_states[user_id]['step'] == 'datetime':
+                new_activity = Activity(
+                    name=user_states[user_id]['name'],
+                    datetime=event.postback.params['datetime'],
+                    creator_id=user_id
+                )
+                db.session.add(new_activity)
+                db.session.commit()
 
+                request = ReplyMessageRequest(
+                    reply_token=event.reply_token,
+                    messages=[create_activities_list_flex()]
+                )
+                messaging_api.reply_message(request)
 
-        elif "action=select_date" in data:
-            with user_states_lock:
-               if user_id in user_states and 'name' in user_states[user_id]:
-                    new_activity = Activity(
-                        name=user_states[user_id]['name'],
-                        datetime=event.postback.params['datetime'],
-                        creator_id=user_id
-                    )
-                    db.session.add(new_activity)
-                    db.session.commit()
-
-                    request = ReplyMessageRequest(
-                        reply_token=event.reply_token,
-                        messages=[create_activities_list_flex()]
-                    )
-                    messaging_api.reply_message(request)
-
-                    del user_states[user_id]
-               else:
-                  request = ReplyMessageRequest(
-                        reply_token=event.reply_token,
-                        messages=[TextMessage(text="請先選擇副本名稱")]
-                    )
-                  messaging_api.reply_message(request)
-
+                del user_states[user_id]
 
         elif "action=join_activity" in data:
             activity_id = int(data.split('&id=')[1])
@@ -394,6 +518,7 @@ def handle_postback(event):
                     activity_id=activity_id,
                     user_id=user_id
                 ).first()
+
                 user_name = get_user_profile(user_id)
 
                 if existing_participant:
@@ -406,6 +531,7 @@ def handle_postback(event):
                     )
                     db.session.add(new_participant)
                     db.session.commit()
+
                     response_text = (
                         f"➜{activity.name}：{user_name} 已成功報名\n"
                         f"副本時間：{activity.datetime}\n"
@@ -475,6 +601,7 @@ def handle_postback(event):
                 participant_list = '\n'.join([
                     f"✓ {p.user_name}" for p in activity.participants
                 ])
+
                 response_text = (
                     f"➜{activity.name} 報名名單\n"
                     f"副本時間：{activity.datetime}\n"
@@ -482,14 +609,37 @@ def handle_postback(event):
                     f"-----------------\n"
                     f"{participant_list}"
                 )
+
                 request = ReplyMessageRequest(
                     reply_token=event.reply_token,
                     messages=[TextMessage(text=response_text)]
                 )
                 messaging_api.reply_message(request)
 
+        elif "action=confirm_delete_all" in data:
+            # Delete all activities and participants
+            Participant.query.delete()
+            Activity.query.delete()
+            db.session.commit()
+            response_text = "所有副本已刪除"
+            request = ReplyMessageRequest(
+                reply_token=event.reply_token,
+                messages=[TextMessage(text=response_text)]
+            )
+            messaging_api.reply_message(request)
+
+        elif "action=cancel_delete_all" in data:
+            response_text = "已取消刪除所有副本"
+            request = ReplyMessageRequest(
+                reply_token=event.reply_token,
+                messages=[TextMessage(text=response_text)]
+            )
+            messaging_api.reply_message(request)
+
     except Exception as e:
         logger.error(f"Error: {e}")
+
+
 
 # 修改初始化數據庫的函數
 def init_db():
