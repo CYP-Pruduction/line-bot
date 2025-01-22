@@ -60,17 +60,17 @@ class Participant(db.Model):
 user_states = {}
 
 
-async def get_user_profile(user_id):
+def get_user_profile(user_id):
     """獲取 LINE 用戶資料"""
     try:
-        profile = await messaging_api.get_profile(user_id)
+        profile = messaging_api.get_profile(user_id)
         return profile.display_name
     except Exception as e:
         logger.error(f"Error getting user profile: {e}")
         return "未知用戶"
 
 
-def create_select_activity_name_flex():
+def create_select_activity_and_datetime_flex():
     flex_content = {
         "type": "bubble",
         "body": {
@@ -88,7 +88,7 @@ def create_select_activity_name_flex():
                     "type": "separator",
                     "margin": "lg"
                 },
-                {
+                 {
                     "type": "box",
                     "layout": "horizontal",
                     "margin": "md",
@@ -115,33 +115,6 @@ def create_select_activity_name_flex():
                             }
                          }
                     ]
-                }
-            ]
-        }
-    }
-    return FlexMessage(
-        alt_text="選擇副本名稱",
-        contents=FlexContainer.from_dict(flex_content)
-    )
-
-
-def create_datetime_picker_flex():
-    flex_content = {
-        "type": "bubble",
-        "body": {
-            "type": "box",
-            "layout": "vertical",
-            "contents": [
-                {
-                    "type": "text",
-                    "text": "選擇副本時間",
-                    "weight": "bold",
-                    "size": "xl",
-                    "color": "#1DB446"
-                },
-                {
-                    "type": "separator",
-                    "margin": "lg"
                 },
                 {
                     "type": "button",
@@ -158,7 +131,7 @@ def create_datetime_picker_flex():
         }
     }
     return FlexMessage(
-        alt_text="選擇副本時間",
+        alt_text="選擇副本名稱和時間",
         contents=FlexContainer.from_dict(flex_content)
     )
 
@@ -321,10 +294,9 @@ def handle_text_message(event):
             )
             messaging_api.reply_message(request)
         elif text == "+副本":
-             user_states[user_id] = {'step': 'select_activity'}
              request = ReplyMessageRequest(
                  reply_token=event.reply_token,
-                 messages=[create_select_activity_name_flex()]
+                 messages=[create_select_activity_and_datetime_flex()]
              )
              messaging_api.reply_message(request)
         elif text == "副本":
@@ -348,25 +320,19 @@ def get_user_profile(user_id):
         return "未知用戶"
 
 @handler.add(PostbackEvent)
-async def handle_postback(event):
+def handle_postback(event):
     try:
         user_id = event.source.user_id
         data = event.postback.data
 
         if "action=select_activity" in data:
-            activity_name = data.split('&name=')[1]
-            user_states[user_id] = {
-                'step': 'datetime',
-                'name': activity_name
-            }
-            request = ReplyMessageRequest(
-                reply_token=event.reply_token,
-                messages=[create_datetime_picker_flex()]
-            )
-            messaging_api.reply_message(request)
+             activity_name = data.split('&name=')[1]
+             if user_id not in user_states:
+                user_states[user_id] = {}
+             user_states[user_id]['name'] = activity_name
 
         elif "action=select_date" in data:
-            if user_id in user_states and user_states[user_id]['step'] == 'datetime':
+            if user_id in user_states and 'name' in user_states[user_id]:
                 new_activity = Activity(
                     name=user_states[user_id]['name'],
                     datetime=event.postback.params['datetime'],
@@ -388,6 +354,13 @@ async def handle_postback(event):
                 messaging_api.reply_message(request)
 
                 del user_states[user_id]
+            else:
+               request = ReplyMessageRequest(
+                    reply_token=event.reply_token,
+                    messages=[TextMessage(text="請先選擇副本名稱")]
+                )
+               messaging_api.reply_message(request)
+
 
         elif "action=join_activity" in data:
             activity_id = int(data.split('&id=')[1])
@@ -398,7 +371,7 @@ async def handle_postback(event):
                     activity_id=activity_id,
                     user_id=user_id
                 ).first()
-                user_name = await get_user_profile(user_id)  # 修改處
+                user_name = get_user_profile(user_id)
 
                 if existing_participant:
                     response_text = f"➜{activity.name}：{user_name} 已報名"
@@ -434,7 +407,7 @@ async def handle_postback(event):
                 user_id=user_id
             ).first()
 
-            user_name = await get_user_profile(user_id)  # 修改處
+            user_name = get_user_profile(user_id)
 
             if participant:
                 activity_name = participant.activity.name
@@ -462,7 +435,7 @@ async def handle_postback(event):
                     db.session.commit()
                     response_text = f"➜{activity_name}：已刪除"
                 else:
-                    user_name = await get_user_profile(user_id)  # 修改處
+                    user_name = get_user_profile(user_id)
                     response_text = f"➜{activity.name}：{user_name} 無刪除權限"
 
                 request = ReplyMessageRequest(
