@@ -271,7 +271,6 @@ def callback():
     return 'OK'
 
 
-@handler.add(MessageEvent, message=TextMessageContent)
 def handle_text_message(event):
     try:
         user_id = event.source.user_id
@@ -298,7 +297,7 @@ def handle_text_message(event):
             )
             messaging_api.reply_message(request)
         elif text == "+副本":
-            if user_id not in user_states:
+            if user_id not in user_states: # 確保 user_states 初始化
                 user_states[user_id] = {}
             flex_message = create_select_activity_and_datetime_flex(event.source.user_id)
             request = ReplyMessageRequest(
@@ -346,7 +345,7 @@ def handle_postback(event):
 
         if "action=select_activity" in data:
              activity_name = data.split('&name=')[1]
-             if user_id not in user_states:
+             if user_id not in user_states: # 確保 user_states 初始化 (postback時也有可能發生)
                 user_states[user_id] = {}
              if user_states[user_id].get('name') == activity_name:
                 user_states[user_id].pop('name',None)
