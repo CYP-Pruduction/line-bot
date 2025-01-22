@@ -271,7 +271,6 @@ def callback():
         logger.error(f"Error: {e}")
     return 'OK'
 
-
 @handler.add(MessageEvent, message=TextMessageContent)
 def handle_text_message(event):
     try:
@@ -309,7 +308,7 @@ def handle_text_message(event):
             )
             response = messaging_api.reply_message(request)
             with user_states_lock:
-               user_states[user_id]['message_id'] = response.json().get('messages')[0].get('id')
+                user_states[user_id]['message_id'] = response.json().get('messages')[0].get('id')
         elif text == "副本":
             request = ReplyMessageRequest(
                 reply_token=event.reply_token,
@@ -354,17 +353,10 @@ def handle_postback(event):
                     user_states[user_id].pop('name', None)
                 else:
                     user_states[user_id]['name'] = activity_name
-            # 回覆新的訊息，並移除 message_id
-            flex_message = create_select_activity_and_datetime_flex(user_id)
-            request = ReplyMessageRequest(
-                reply_token=event.reply_token,
-                messages=[flex_message]
-            )
-            messaging_api.reply_message(request)
-            with user_states_lock:
-                if user_id in user_states:
-                    user_states[user_id].pop('message_id', None)
-
+                message_id = user_states[user_id].get('message_id')
+                if message_id:
+                     flex_message = create_select_activity_and_datetime_flex(user_id)
+                     messaging_api.update_message(message_id=message_id, message=flex_message)
 
 
         elif "action=select_date" in data:
