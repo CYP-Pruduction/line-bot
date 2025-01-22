@@ -298,13 +298,14 @@ def handle_text_message(event):
             )
             messaging_api.reply_message(request)
         elif text == "+副本":
-            if user_id not in user_states: # 確保 user_states 初始化
+            if user_id not in user_states:
                 user_states[user_id] = {}
             flex_message = create_select_activity_and_datetime_flex(event.source.user_id)
             request = ReplyMessageRequest(
-                 reply_token=event.reply_token,
-                 messages=[flex_message]
+                reply_token=event.reply_token,
+                messages=[flex_message]
             )
+            # 提前儲存 message_id
             response = messaging_api.reply_message(request)
             user_states[user_id]['message_id'] = response.json().get('messages')[0].get('id')
         elif text == "副本":
@@ -344,7 +345,7 @@ def handle_postback(event):
 
         if "action=select_activity" in data:
              activity_name = data.split('&name=')[1]
-             if user_id not in user_states: # 確保 user_states 初始化 (postback時也有可能發生)
+             if user_id not in user_states:
                 user_states[user_id] = {}
              if user_states[user_id].get('name') == activity_name:
                 user_states[user_id].pop('name',None)
@@ -360,7 +361,6 @@ def handle_postback(event):
                     messages=[TextMessage(text="發生錯誤，請重新輸入+副本")]
                 )
                  messaging_api.reply_message(request)
-
 
         elif "action=select_date" in data:
             if user_id in user_states and 'name' in user_states[user_id]:
