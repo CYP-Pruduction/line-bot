@@ -290,7 +290,7 @@ def handle_text_message(event):
                 "➜ 取消 - 取消報名\n"
                 "➜ 名單 - 查看報名名單\n"
                 "➜ 移除 - 刪除副本(限創建者)\n"
-                "clear_all\n"
+                "clear_all_activities\n"
             )
             request = ReplyMessageRequest(
                 reply_token=event.reply_token,
@@ -298,14 +298,14 @@ def handle_text_message(event):
             )
             messaging_api.reply_message(request)
         elif text == "+副本":
+            if user_id not in user_states:
+                user_states[user_id] = {}
             flex_message = create_select_activity_and_datetime_flex(event.source.user_id)
             request = ReplyMessageRequest(
                  reply_token=event.reply_token,
                  messages=[flex_message]
             )
             response = messaging_api.reply_message(request)
-            if user_id not in user_states:
-               user_states[user_id] = {}
             user_states[user_id]['message_id'] = response.json().get('messages')[0].get('id')
         elif text == "副本":
             request = ReplyMessageRequest(
@@ -313,7 +313,7 @@ def handle_text_message(event):
                 messages=[create_activities_list_flex()]
             )
             messaging_api.reply_message(request)
-        elif text == "clear_all":
+        elif text == "clear_all_activities":
             with app.app_context():
                 Participant.query.delete()
                 Activity.query.delete()
