@@ -70,7 +70,9 @@ def get_user_profile(user_id):
         return "未知用戶"
 
 
-def create_select_activity_and_datetime_flex():
+def create_select_activity_and_datetime_flex(user_id):
+    selected_activity = user_states.get(user_id, {}).get('name', None)
+
     flex_content = {
         "type": "bubble",
         "body": {
@@ -96,21 +98,21 @@ def create_select_activity_and_datetime_flex():
                     "contents": [
                         {
                             "type": "button",
-                            "style": "primary",
+                            "style": "secondary" if selected_activity == "舞陽城" else "primary",
                              "flex": 1,
                             "action": {
                                 "type": "postback",
-                                "label": "舞陽城",
+                                "label": f"{'✓ ' if selected_activity == '舞陽城' else ''}舞陽城",
                                 "data": "action=select_activity&name=舞陽城"
                             }
                          },
                         {
                              "type": "button",
-                             "style": "primary",
+                             "style": "secondary" if selected_activity == "劍夢武林" else "primary",
                              "flex": 1,
                              "action": {
                                 "type": "postback",
-                                "label": "劍夢武林",
+                                "label": f"{'✓ ' if selected_activity == '劍夢武林' else ''}劍夢武林",
                                 "data": "action=select_activity&name=劍夢武林"
                             }
                          }
@@ -296,7 +298,7 @@ def handle_text_message(event):
         elif text == "+副本":
              request = ReplyMessageRequest(
                  reply_token=event.reply_token,
-                 messages=[create_select_activity_and_datetime_flex()]
+                 messages=[create_select_activity_and_datetime_flex(event.source.user_id)]
              )
              messaging_api.reply_message(request)
         elif text == "副本":
@@ -329,7 +331,15 @@ def handle_postback(event):
              activity_name = data.split('&name=')[1]
              if user_id not in user_states:
                 user_states[user_id] = {}
-             user_states[user_id]['name'] = activity_name
+             if user_states[user_id].get('name') == activity_name:
+                user_states[user_id].pop('name',None)
+             else:
+                user_states[user_id]['name'] = activity_name
+             request = ReplyMessageRequest(
+                 reply_token=event.reply_token,
+                 messages=[create_select_activity_and_datetime_flex(user_id)]
+             )
+             messaging_api.reply_message(request)
 
         elif "action=select_date" in data:
             if user_id in user_states and 'name' in user_states[user_id]:
@@ -341,15 +351,9 @@ def handle_postback(event):
                 db.session.add(new_activity)
                 db.session.commit()
 
-                confirmation_text = (
-                    f"建立成功(•ᴗ•)\n"
-                    f"副本名稱：{new_activity.name}\n"
-                    f"副本時間：{new_activity.datetime}"
-                )
-
                 request = ReplyMessageRequest(
                     reply_token=event.reply_token,
-                    messages=[TextMessage(text=confirmation_text)]
+                    messages=[create_activities_list_flex()]
                 )
                 messaging_api.reply_message(request)
 
