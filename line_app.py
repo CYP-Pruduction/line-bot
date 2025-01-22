@@ -271,6 +271,7 @@ def callback():
     return 'OK'
 
 
+@handler.add(MessageEvent, message=TextMessageContent)
 def handle_text_message(event):
     try:
         user_id = event.source.user_id
@@ -325,8 +326,6 @@ def handle_text_message(event):
 
     except Exception as e:
         logger.error(f"Error: {e}")
-
-
 
 def get_user_profile(user_id):
     """獲取 LINE 用戶資料"""
