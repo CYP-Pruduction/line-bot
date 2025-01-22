@@ -313,7 +313,7 @@ def handle_text_message(event):
             user_states[user_id] = {'step': 'select_activity'}
             request = ReplyMessageRequest(
                 reply_token=event.reply_token,
-                messages=[create_activities_list_flex()]
+                messages=[create_datetime_picker_flex]
             )
             messaging_api.reply_message(request)
         elif text == "副本":
