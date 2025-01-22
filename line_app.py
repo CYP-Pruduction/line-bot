@@ -13,6 +13,7 @@ from linebot.v3.messaging import (
 import logging
 from datetime import datetime
 import os
+import threading
 
 app = Flask(__name__)
 
@@ -58,7 +59,7 @@ class Participant(db.Model):
 
 # 使用者狀態追蹤
 user_states = {}
-
+user_states_lock = threading.Lock()
 
 def get_user_profile(user_id):
     """獲取 LINE 用戶資料"""
@@ -298,16 +299,17 @@ def handle_text_message(event):
             )
             messaging_api.reply_message(request)
         elif text == "+副本":
-            if user_id not in user_states:
-                user_states[user_id] = {}
+            with user_states_lock:
+                if user_id not in user_states:
+                    user_states[user_id] = {}
             flex_message = create_select_activity_and_datetime_flex(event.source.user_id)
             request = ReplyMessageRequest(
                 reply_token=event.reply_token,
                 messages=[flex_message]
             )
-            # 提前儲存 message_id
             response = messaging_api.reply_message(request)
-            user_states[user_id]['message_id'] = response.json().get('messages')[0].get('id')
+            with user_states_lock:
+                user_states[user_id]['message_id'] = response.json().get('messages')[0].get('id')
         elif text == "副本":
             request = ReplyMessageRequest(
                 reply_token=event.reply_token,
@@ -344,48 +346,51 @@ def handle_postback(event):
         data = event.postback.data
 
         if "action=select_activity" in data:
-             activity_name = data.split('&name=')[1]
-             if user_id not in user_states:
-                user_states[user_id] = {}
-             if user_states[user_id].get('name') == activity_name:
-                user_states[user_id].pop('name',None)
-             else:
-                user_states[user_id]['name'] = activity_name
-             message_id = user_states[user_id].get('message_id')
-             if message_id:
+            with user_states_lock:
+                activity_name = data.split('&name=')[1]
+                if user_id not in user_states:
+                    user_states[user_id] = {}
+                if user_states[user_id].get('name') == activity_name:
+                   user_states[user_id].pop('name', None)
+                else:
+                   user_states[user_id]['name'] = activity_name
+                message_id = user_states[user_id].get('message_id')
+
+            if message_id:
                 flex_message = create_select_activity_and_datetime_flex(user_id)
-                messaging_api.update_message(message_id = message_id, message=flex_message)
-             else:
-                 request = ReplyMessageRequest(
+                messaging_api.update_message(message_id=message_id, message=flex_message)
+            else:
+                request = ReplyMessageRequest(
                     reply_token=event.reply_token,
                     messages=[TextMessage(text="發生錯誤，請重新輸入+副本")]
                 )
-                 messaging_api.reply_message(request)
-
-        elif "action=select_date" in data:
-            if user_id in user_states and 'name' in user_states[user_id]:
-                new_activity = Activity(
-                    name=user_states[user_id]['name'],
-                    datetime=event.postback.params['datetime'],
-                    creator_id=user_id
-                )
-                db.session.add(new_activity)
-                db.session.commit()
-
-                request = ReplyMessageRequest(
-                    reply_token=event.reply_token,
-                    messages=[create_activities_list_flex()]
-                )
                 messaging_api.reply_message(request)
 
-                del user_states[user_id]
-            else:
-               request = ReplyMessageRequest(
-                    reply_token=event.reply_token,
-                    messages=[TextMessage(text="請先選擇副本名稱")]
-                )
-               messaging_api.reply_message(request)
 
+        elif "action=select_date" in data:
+            with user_states_lock:
+               if user_id in user_states and 'name' in user_states[user_id]:
+                    new_activity = Activity(
+                        name=user_states[user_id]['name'],
+                        datetime=event.postback.params['datetime'],
+                        creator_id=user_id
+                    )
+                    db.session.add(new_activity)
+                    db.session.commit()
+
+                    request = ReplyMessageRequest(
+                        reply_token=event.reply_token,
+                        messages=[create_activities_list_flex()]
+                    )
+                    messaging_api.reply_message(request)
+
+                    del user_states[user_id]
+               else:
+                  request = ReplyMessageRequest(
+                        reply_token=event.reply_token,
+                        messages=[TextMessage(text="請先選擇副本名稱")]
+                    )
+                  messaging_api.reply_message(request)
 
         elif "action=join_activity" in data:
             activity_id = int(data.split('&id=')[1])
