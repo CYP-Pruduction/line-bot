@@ -502,35 +502,34 @@ def handle_postback(event):
         user_id = event.source.user_id
         data = event.postback.data
 
-        if "action=join_activity" in data:
-            activity_id = int(data.split('&id=')[1])
-            activity = Activity.query.get(activity_id)
+        if "action=select_date" in data:
+            # 直接從回調中提取必要信息，不依賴 user_states
+            datetime_selected = event.postback.params['datetime']
 
-            if activity:
-                existing_participant = Participant.query.filter_by(
-                    activity_id=activity_id,
-                    user_id=user_id
-                ).first()
+            # 檢查是否有上下文狀態
+            if user_id in user_states and user_states[user_id].get('step') == 'datetime':
+                activity_name = user_states[user_id].get('name')
 
-                # 使用 run_async 來獲取用戶名稱
-                user_name = run_async(get_user_profile(user_id))
-
-                if existing_participant:
-                    response_text = f"➜{activity.name}：{user_name} 已報名"
-                else:
-                    new_participant = Participant(
-                        user_id=user_id,
-                        user_name=user_name,
-                        activity_id=activity_id
+                # 如果名稱存在，創建副本
+                if activity_name:
+                    new_activity = Activity(
+                        name=activity_name,
+                        datetime=datetime_selected,
+                        creator_id=user_id
                     )
-                    db.session.add(new_participant)
+                    db.session.add(new_activity)
                     db.session.commit()
 
                     response_text = (
-                        f"➜{activity.name}：{user_name} 已成功報名\n"
-                        f"副本時間：{activity.datetime}\n"
-                        f"參加人數：{len(activity.participants)}"
+                        f"副本 {activity_name} 已創建\n"
+                        f"時間：{datetime_selected}"
                     )
+
+                    request = ReplyMessageRequest(
+                        reply_token=event.reply_token,
+                        messages=[TextMessage(text=response_text)]
+                    )
+                    messaging_api.reply_message(request)
 
                 request = ReplyMessageRequest(
                     reply_token=event.reply_token,
