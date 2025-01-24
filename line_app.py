@@ -502,20 +502,63 @@ def handle_postback(event):
         user_id = event.source.user_id
         data = event.postback.data
 
-        # 重新實現報名功能
-        if "action=join_activity" in data:
+        # 副本建立流程
+        if "action=select_date" in data:
+            datetime_selected = event.postback.params['datetime']
+
+            # 確認用戶狀態
+            if user_id in user_states and user_states[user_id].get('step') == 'datetime':
+                activity_name = user_states[user_id].get('name')
+
+                if activity_name:
+                    # 建立新的副本
+                    new_activity = Activity(
+                        name=activity_name,
+                        datetime=datetime_selected,
+                        creator_id=user_id
+                    )
+                    db.session.add(new_activity)
+                    db.session.commit()
+
+                    # 清除用戶狀態
+                    del user_states[user_id]
+
+                    response_text = (
+                        f"副本 {activity_name} 已創建\n"
+                        f"時間：{datetime_selected}"
+                    )
+
+                    request = ReplyMessageRequest(
+                        reply_token=event.reply_token,
+                        messages=[TextMessage(text=response_text)]
+                    )
+                    messaging_api.reply_message(request)
+                else:
+                    request = ReplyMessageRequest(
+                        reply_token=event.reply_token,
+                        messages=[TextMessage(text="副本創建失敗，請重新輸入")]
+                    )
+                    messaging_api.reply_message(request)
+            else:
+                request = ReplyMessageRequest(
+                    reply_token=event.reply_token,
+                    messages=[TextMessage(text="無法識別副本，請重新開始")]
+                )
+                messaging_api.reply_message(request)
+
+        # 報名功能
+        elif "action=join_activity" in data:
             activity_id = int(data.split('&id=')[1])
             activity = Activity.query.get(activity_id)
 
             if activity:
-                # 先嘗試獲取用戶名稱
+                # 獲取用戶名稱
                 try:
-                    # 直接調用 API 獲取用戶名稱，不使用 run_async
                     profile = messaging_api.get_profile(user_id)
                     user_name = profile.display_name
                 except Exception as e:
                     logger.error(f"Error getting user profile: {e}")
-                    user_name = user_id  # 如果獲取失敗，使用 user_id
+                    user_name = user_id
 
                 # 檢查是否已經報名
                 existing_participant = Participant.query.filter_by(
@@ -547,7 +590,7 @@ def handle_postback(event):
                 )
                 messaging_api.reply_message(request)
 
-        # 重新實現取消報名功能
+        # 取消報名功能
         elif "action=cancel_join" in data:
             activity_id = int(data.split('&id=')[1])
             activity = Activity.query.get(activity_id)
@@ -555,14 +598,13 @@ def handle_postback(event):
             if not activity:
                 return
 
-            # 先嘗試獲取用戶名稱
+            # 獲取用戶名稱
             try:
-                # 直接調用 API 獲取用戶名稱，不使用 run_async
                 profile = messaging_api.get_profile(user_id)
                 user_name = profile.display_name
             except Exception as e:
                 logger.error(f"Error getting user profile: {e}")
-                user_name = user_id  # 如果獲取失敗，使用 user_id
+                user_name = user_id
 
             # 檢查是否已報名
             participant = Participant.query.filter_by(
@@ -571,13 +613,13 @@ def handle_postback(event):
             ).first()
 
             if participant:
-                # 如果已報名，則取消報名
+                # 取消報名
                 activity_name = participant.activity.name
                 db.session.delete(participant)
                 db.session.commit()
                 response_text = f"➜{activity_name}：{user_name} 已取消報名"
             else:
-                # 如果尚未報名
+                # 尚未報名
                 response_text = f"➜{activity.name}：{user_name} 尚未報名"
 
             request = ReplyMessageRequest(
@@ -586,7 +628,9 @@ def handle_postback(event):
             )
             messaging_api.reply_message(request)
 
+        # 保留其他原有的 postback 處理邏輯
         elif "action=delete_activity" in data:
+            # (原有的刪除副本邏輯)
             activity_id = int(data.split('&id=')[1])
             activity = Activity.query.get(activity_id)
 
@@ -598,7 +642,11 @@ def handle_postback(event):
                     db.session.commit()
                     response_text = f"➜{activity_name}：已刪除"
                 else:
-                    user_name = get_user_profile(user_id)
+                    try:
+                        profile = messaging_api.get_profile(user_id)
+                        user_name = profile.display_name
+                    except:
+                        user_name = user_id
                     response_text = f"➜{activity.name}：{user_name} 無刪除權限"
 
                 request = ReplyMessageRequest(
@@ -607,7 +655,9 @@ def handle_postback(event):
                 )
                 messaging_api.reply_message(request)
 
+        # 其他原有的 postback 處理（如查看參與者、刪除所有副本等）
         elif "action=view_participants" in data:
+            # (原有的查看參與者邏輯)
             activity_id = int(data.split('&id=')[1])
             activity = Activity.query.get(activity_id)
 
@@ -630,8 +680,8 @@ def handle_postback(event):
                 )
                 messaging_api.reply_message(request)
 
+        # 刪除所有副本相關的 postback
         elif "action=confirm_delete_all" in data:
-            # Delete all activities and participants
             Participant.query.delete()
             Activity.query.delete()
             db.session.commit()
@@ -649,6 +699,7 @@ def handle_postback(event):
                 messages=[TextMessage(text=response_text)]
             )
             messaging_api.reply_message(request)
+
     except Exception as e:
         logger.error(f"Error in handle_postback: {e}")
 
