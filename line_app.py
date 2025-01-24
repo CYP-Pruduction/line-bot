@@ -384,7 +384,61 @@ def handle_text_message(event):
         user_id = event.source.user_id
         text = event.message.text
 
-        if text == "說明":
+        # 新增人員指令處理
+        if text.startswith("+ "):
+            parts = text.split(" ")
+            if len(parts) == 3:
+                activity_name = parts[1]
+                new_participant_name = parts[2]
+
+                # 尋找副本
+                activity = Activity.query.filter_by(name=activity_name).first()
+
+                if activity:
+                    # 檢查是否已存在此人
+                    existing_participant = Participant.query.filter_by(
+                        activity_id=activity.id,
+                        user_name=new_participant_name
+                    ).first()
+
+                    if existing_participant:
+                        response_text = f"➜{activity_name}：{new_participant_name} 已存在報名名單中"
+                    else:
+                        # 新增參與者
+                        new_participant = Participant(
+                            user_id=user_id,  # 使用當前操作用戶的ID
+                            user_name=new_participant_name,
+                            activity_id=activity.id
+                        )
+                        db.session.add(new_participant)
+                        db.session.commit()
+
+                        response_text = (
+                            f"➜{activity_name}：{new_participant_name} 已成功報名\n"
+                            f"副本時間：{activity.datetime}\n"
+                            f"目前參加人數：{len(activity.participants)}"
+                        )
+
+                    request = ReplyMessageRequest(
+                        reply_token=event.reply_token,
+                        messages=[TextMessage(text=response_text)]
+                    )
+                    messaging_api.reply_message(request)
+                else:
+                    request = ReplyMessageRequest(
+                        reply_token=event.reply_token,
+                        messages=[TextMessage(text=f"找不到名為 {activity_name} 的副本")]
+                    )
+                    messaging_api.reply_message(request)
+            else:
+                request = ReplyMessageRequest(
+                    reply_token=event.reply_token,
+                    messages=[TextMessage(text="指令格式錯誤。請使用：+ [副本名稱] [人員名稱]")]
+                )
+                messaging_api.reply_message(request)
+
+        # 更新說明指令
+        elif text == "說明":
             help_text = (
                 "📝 指令說明\n"
                 "-------------------\n"
@@ -398,7 +452,8 @@ def handle_text_message(event):
                 "➜ 取消 - 取消報名\n"
                 "➜ 名單 - 查看報名名單\n"
                 "➜ 移除 - 刪除副本(限創建者)\n"
-                "➜ 刪除所有副本 - 清空所有副本列表 (需確認)"
+                "➜ 刪除所有副本 - 清空所有副本列表 (需確認)\n"
+                "➜ + [副本名稱] [人員名稱] - 新增特定人員到副本"
             )
             request = ReplyMessageRequest(
                 reply_token=event.reply_token,
