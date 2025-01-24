@@ -502,34 +502,44 @@ def handle_postback(event):
         user_id = event.source.user_id
         data = event.postback.data
 
-        if "action=select_date" in data:
-            # 直接從回調中提取必要信息，不依賴 user_states
-            datetime_selected = event.postback.params['datetime']
+        # 重新實現報名功能
+        if "action=join_activity" in data:
+            activity_id = int(data.split('&id=')[1])
+            activity = Activity.query.get(activity_id)
 
-            # 檢查是否有上下文狀態
-            if user_id in user_states and user_states[user_id].get('step') == 'datetime':
-                activity_name = user_states[user_id].get('name')
+            if activity:
+                # 先嘗試獲取用戶名稱
+                try:
+                    # 直接調用 API 獲取用戶名稱，不使用 run_async
+                    profile = messaging_api.get_profile(user_id)
+                    user_name = profile.display_name
+                except Exception as e:
+                    logger.error(f"Error getting user profile: {e}")
+                    user_name = user_id  # 如果獲取失敗，使用 user_id
 
-                # 如果名稱存在，創建副本
-                if activity_name:
-                    new_activity = Activity(
-                        name=activity_name,
-                        datetime=datetime_selected,
-                        creator_id=user_id
+                # 檢查是否已經報名
+                existing_participant = Participant.query.filter_by(
+                    activity_id=activity_id,
+                    user_id=user_id
+                ).first()
+
+                if existing_participant:
+                    response_text = f"➜{activity.name}：{user_name} 已報名"
+                else:
+                    # 建立新的參與者
+                    new_participant = Participant(
+                        user_id=user_id,
+                        user_name=user_name,
+                        activity_id=activity_id
                     )
-                    db.session.add(new_activity)
+                    db.session.add(new_participant)
                     db.session.commit()
 
                     response_text = (
-                        f"副本 {activity_name} 已創建\n"
-                        f"時間：{datetime_selected}"
+                        f"➜{activity.name}：{user_name} 已成功報名\n"
+                        f"副本時間：{activity.datetime}\n"
+                        f"目前參加人數：{len(activity.participants)}"
                     )
-
-                    request = ReplyMessageRequest(
-                        reply_token=event.reply_token,
-                        messages=[TextMessage(text=response_text)]
-                    )
-                    messaging_api.reply_message(request)
 
                 request = ReplyMessageRequest(
                     reply_token=event.reply_token,
@@ -537,6 +547,7 @@ def handle_postback(event):
                 )
                 messaging_api.reply_message(request)
 
+        # 重新實現取消報名功能
         elif "action=cancel_join" in data:
             activity_id = int(data.split('&id=')[1])
             activity = Activity.query.get(activity_id)
@@ -544,20 +555,29 @@ def handle_postback(event):
             if not activity:
                 return
 
+            # 先嘗試獲取用戶名稱
+            try:
+                # 直接調用 API 獲取用戶名稱，不使用 run_async
+                profile = messaging_api.get_profile(user_id)
+                user_name = profile.display_name
+            except Exception as e:
+                logger.error(f"Error getting user profile: {e}")
+                user_name = user_id  # 如果獲取失敗，使用 user_id
+
+            # 檢查是否已報名
             participant = Participant.query.filter_by(
                 activity_id=activity_id,
                 user_id=user_id
             ).first()
 
-            # 使用 run_async 來獲取用戶名稱
-            user_name = run_async(get_user_profile(user_id))
-
             if participant:
+                # 如果已報名，則取消報名
                 activity_name = participant.activity.name
                 db.session.delete(participant)
                 db.session.commit()
-                response_text = f"➜{activity_name}：{user_name} 已取消"
+                response_text = f"➜{activity_name}：{user_name} 已取消報名"
             else:
+                # 如果尚未報名
                 response_text = f"➜{activity.name}：{user_name} 尚未報名"
 
             request = ReplyMessageRequest(
@@ -629,9 +649,8 @@ def handle_postback(event):
                 messages=[TextMessage(text=response_text)]
             )
             messaging_api.reply_message(request)
-
     except Exception as e:
-        logger.error(f"Error: {e}")
+        logger.error(f"Error in handle_postback: {e}")
 
 
 
