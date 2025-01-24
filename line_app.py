@@ -523,16 +523,13 @@ def handle_postback(event):
                     # 清除用戶狀態
                     del user_states[user_id]
 
-                    response_text = (
-                        f"副本 {activity_name} 已創建\n"
-                        f"時間：{datetime_selected}"
-                    )
-
+                    response_message = create_activities_list_flex()
                     request = ReplyMessageRequest(
                         reply_token=event.reply_token,
-                        messages=[TextMessage(text=response_text)]
+                        messages=[response_message]
                     )
                     messaging_api.reply_message(request)
+
                 else:
                     request = ReplyMessageRequest(
                         reply_token=event.reply_token,
