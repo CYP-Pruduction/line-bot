@@ -293,15 +293,16 @@ def handle_text_message(event):
         user_id = event.source.user_id
         text = event.message.text
 
+        # 處理刪除所有副本的命令
         if text == "刪除所有副本":
             confirmation_message = FlexMessage(
                 alt_text="確認刪除所有副本？",
                 contents=FlexContainer.from_dict({
-                   "type": "bubble",
+                    "type": "bubble",
                     "body": {
                         "type": "box",
                         "layout": "vertical",
-                         "contents": [
+                        "contents": [
                             {
                                 "type": "text",
                                 "text": "確認刪除所有副本？",
@@ -309,7 +310,7 @@ def handle_text_message(event):
                                 "size": "xl",
                                 "align": "center"
                             },
-                             {
+                            {
                                 "type": "separator",
                                 "margin": "lg"
                             },
@@ -323,26 +324,26 @@ def handle_text_message(event):
                                         "type": "button",
                                         "style": "primary",
                                         "height": "sm",
-                                         "action": {
+                                        "action": {
                                             "type": "postback",
                                             "label": "是",
                                             "data": "action=confirm_delete_all"
-                                            }
+                                        }
                                     },
                                     {
-                                         "type": "button",
-                                         "style": "secondary",
-                                         "height": "sm",
-                                         "action": {
-                                              "type": "postback",
-                                              "label": "否",
-                                              "data": "action=cancel_delete_all"
-                                          }
+                                        "type": "button",
+                                        "style": "secondary",
+                                        "height": "sm",
+                                        "action": {
+                                            "type": "postback",
+                                            "label": "否",
+                                            "data": "action=cancel_delete_all"
+                                        }
                                     }
                                 ]
-                             }
-                         ]
-                     }
+                            }
+                        ]
+                    }
                 })
             )
             request = ReplyMessageRequest(
@@ -352,55 +353,16 @@ def handle_text_message(event):
             messaging_api.reply_message(request)
             return
 
-
-        if text.startswith("副本 "):
-            activity_name = text[3:].strip()
-            if activity_name:
-                user_states[user_id] = {
-                    'step': 'datetime',
-                    'name': activity_name
-                }
-                request = ReplyMessageRequest(
-                    reply_token=event.reply_token,
-                    messages=[create_datetime_picker_flex()]
-                )
-                messaging_api.reply_message(request)
-            else:
-                request = ReplyMessageRequest(
-                    reply_token=event.reply_token,
-                    messages=[TextMessage(text="請輸入副本名稱，例如：副本 副本")]
-                )
-                messaging_api.reply_message(request)
-
-        elif text == "副本":
-            request = ReplyMessageRequest(
-                reply_token=event.reply_token,
-                messages=[create_activities_list_flex()]
-            )
-            messaging_api.reply_message(request)
-
-    except Exception as e:
-        logger.error(f"Error: {e}")
-
-
-@handler.add(MessageEvent, message=TextMessageContent)
-def handle_text_message(event):
-    try:
-        user_id = event.source.user_id
-        text = event.message.text
-
-        # 新增人員指令處理
+        # 處理新增人員指令
         if text.startswith("+ "):
             parts = text.split(" ")
             if len(parts) == 3:
                 activity_name = parts[1]
                 new_participant_name = parts[2]
 
-                # 尋找副本
                 activity = Activity.query.filter_by(name=activity_name).first()
 
                 if activity:
-                    # 檢查是否已存在此人
                     existing_participant = Participant.query.filter_by(
                         activity_id=activity.id,
                         user_name=new_participant_name
@@ -409,9 +371,8 @@ def handle_text_message(event):
                     if existing_participant:
                         response_text = f"➜{activity_name}：{new_participant_name} 已存在報名名單中"
                     else:
-                        # 新增參與者
                         new_participant = Participant(
-                            user_id=user_id,  # 使用當前操作用戶的ID
+                            user_id=user_id,
                             user_name=new_participant_name,
                             activity_id=activity.id
                         )
@@ -442,7 +403,7 @@ def handle_text_message(event):
                 )
                 messaging_api.reply_message(request)
 
-        # 更新說明指令
+        # 處理說明指令
         elif text == "說明":
             help_text = (
                 "📝 指令說明\n"
@@ -458,7 +419,7 @@ def handle_text_message(event):
                 "➜ 名單 - 查看報名名單\n"
                 "➜ 移除 - 刪除副本(限創建者)\n"
                 "➜ 刪除所有副本 - 清空所有副本列表 (需確認)\n"
-                "➜ + [副本名稱] [人員名稱] - 新增特定人員到副本"
+                "➜ + [副本名稱] [人員名稱] - 新增特定人員到副本\n"
                 "➜ - [副本名稱] [人員名稱] - 於副本名單中刪除特定人員"
             )
             request = ReplyMessageRequest(
@@ -467,86 +428,24 @@ def handle_text_message(event):
             )
             messaging_api.reply_message(request)
 
-        elif text == "刪除所有副本":
-            confirmation_message = FlexMessage(
-                alt_text="確認刪除所有副本？",
-                contents=FlexContainer.from_dict({
-                   "type": "bubble",
-                    "body": {
-                        "type": "box",
-                        "layout": "vertical",
-                         "contents": [
-                            {
-                                "type": "text",
-                                "text": "確認刪除所有副本？",
-                                "weight": "bold",
-                                "size": "xl",
-                                "align": "center"
-                            },
-                             {
-                                "type": "separator",
-                                "margin": "lg"
-                            },
-                            {
-                                "type": "box",
-                                "layout": "horizontal",
-                                "margin": "md",
-                                "spacing": "sm",
-                                "contents": [
-                                    {
-                                        "type": "button",
-                                        "style": "primary",
-                                        "height": "sm",
-                                         "action": {
-                                            "type": "postback",
-                                            "label": "是",
-                                            "data": "action=confirm_delete_all"
-                                            }
-                                    },
-                                    {
-                                         "type": "button",
-                                         "style": "secondary",
-                                         "height": "sm",
-                                         "action": {
-                                              "type": "postback",
-                                              "label": "否",
-                                              "data": "action=cancel_delete_all"
-                                          }
-                                    }
-                                ]
-                             }
-                         ]
-                     }
-                })
-            )
-            request = ReplyMessageRequest(
-                reply_token=event.reply_token,
-                messages=[confirmation_message]
-            )
-            messaging_api.reply_message(request)
-            return
-
+        # 處理刪除特定人員指令
         elif text.startswith("➜ - "):
             parts = text.split(" ")
-            if len(parts) == 4:  # 確保指令格式正確
+            if len(parts) == 4:
                 activity_name = parts[2]
                 participant_name = parts[3]
 
-                # 尋找副本
                 activity = Activity.query.filter_by(name=activity_name).first()
 
                 if activity:
-                    # 尋找該參與者
                     participant = Participant.query.filter_by(
                         activity_id=activity.id,
                         user_name=participant_name
                     ).first()
 
                     if participant:
-                        # 刪除參與者
                         db.session.delete(participant)
                         db.session.commit()
-
                         response_text = f"➜{activity_name}：{participant_name} 已從副本名單中刪除"
                     else:
                         response_text = f"➜{activity_name}：找不到 {participant_name} 的報名紀錄"
@@ -569,6 +468,7 @@ def handle_text_message(event):
                 )
                 messaging_api.reply_message(request)
 
+        # 處理建立副本指令
         elif text.startswith("副本 "):
             activity_name = text[3:].strip()
             if activity_name:
@@ -588,6 +488,7 @@ def handle_text_message(event):
                 )
                 messaging_api.reply_message(request)
 
+        # 處理查看副本列表指令
         elif text == "副本":
             request = ReplyMessageRequest(
                 reply_token=event.reply_token,
@@ -596,8 +497,13 @@ def handle_text_message(event):
             messaging_api.reply_message(request)
 
     except Exception as e:
-        logger.error(f"Error: {e}")
-
+        logger.error(f"Error in handle_text_message: {e}", exc_info=True)
+        # 發送錯誤消息給用戶
+        request = ReplyMessageRequest(
+            reply_token=event.reply_token,
+            messages=[TextMessage(text="處理您的請求時發生錯誤，請稍後再試。")]
+        )
+        messaging_api.reply_message(request)
 
 @handler.add(PostbackEvent)
 def handle_postback(event):
