@@ -505,6 +505,7 @@ def handle_text_message(event):
         )
         messaging_api.reply_message(request)
 
+
 @handler.add(PostbackEvent)
 def handle_postback(event):
     try:
@@ -512,43 +513,63 @@ def handle_postback(event):
         data = event.postback.data
 
         # 副本建立流程
-        if "action=select_date" in data:
-            datetime_selected = event.postback.params['datetime']
+        if "action=select_date" in data and hasattr(event.postback, 'params'):
+            datetime_selected = event.postback.params.get('datetime')
 
-            # 確認用戶狀態
-            if user_id in user_states and user_states[user_id].get('step') == 'datetime':
+            # 確認用戶狀態和日期時間是否存在
+            if user_id in user_states and user_states[user_id].get('step') == 'datetime' and datetime_selected:
                 activity_name = user_states[user_id].get('name')
 
                 if activity_name:
-                    # 建立新的副本
-                    new_activity = Activity(
-                        name=activity_name,
-                        datetime=datetime_selected,
-                        creator_id=user_id
-                    )
-                    db.session.add(new_activity)
-                    db.session.commit()
+                    # 檢查是否已存在相同名稱的副本
+                    existing_activity = Activity.query.filter_by(name=activity_name).first()
+                    if existing_activity:
+                        response_text = f"已存在名為 {activity_name} 的副本"
+                        request = ReplyMessageRequest(
+                            reply_token=event.reply_token,
+                            messages=[TextMessage(text=response_text)]
+                        )
+                    else:
+                        # 建立新的副本
+                        try:
+                            new_activity = Activity(
+                                name=activity_name,
+                                datetime=datetime_selected,
+                                creator_id=user_id
+                            )
+                            db.session.add(new_activity)
+                            db.session.commit()
 
-                    # 清除用戶狀態
-                    del user_states[user_id]
+                            # 清除用戶狀態
+                            del user_states[user_id]
 
-                    response_message = create_activities_list_flex()
-                    request = ReplyMessageRequest(
-                        reply_token=event.reply_token,
-                        messages=[response_message]
-                    )
+                            # 顯示成功訊息和副本列表
+                            success_message = TextMessage(
+                                text=f"➜{activity_name}：副本建立成功！\n時間：{datetime_selected}")
+                            activities_list = create_activities_list_flex()
+
+                            request = ReplyMessageRequest(
+                                reply_token=event.reply_token,
+                                messages=[success_message, activities_list]
+                            )
+                        except Exception as e:
+                            logger.error(f"Error creating activity: {e}")
+                            request = ReplyMessageRequest(
+                                reply_token=event.reply_token,
+                                messages=[TextMessage(text="建立副本時發生錯誤，請稍後再試。")]
+                            )
+
                     messaging_api.reply_message(request)
-
                 else:
                     request = ReplyMessageRequest(
                         reply_token=event.reply_token,
-                        messages=[TextMessage(text="副本創建失敗，請重新輸入")]
+                        messages=[TextMessage(text="副本名稱無效，請重新輸入")]
                     )
                     messaging_api.reply_message(request)
             else:
                 request = ReplyMessageRequest(
                     reply_token=event.reply_token,
-                    messages=[TextMessage(text="無法識別副本，請重新開始")]
+                    messages=[TextMessage(text="無法建立副本，請重新開始")]
                 )
                 messaging_api.reply_message(request)
 
