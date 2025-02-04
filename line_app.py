@@ -592,6 +592,7 @@ def handle_postback(event):
                     reply_token=event.reply_token,
                     messages=[activities_list]
                 )
+                messaging_api.reply_message(request)
 
             except Exception as e:
                 logger.error(f"建立副本時發生資料庫錯誤：{str(e)}", exc_info=True)
