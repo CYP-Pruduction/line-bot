@@ -45,8 +45,9 @@ handler = WebhookHandler(channel_secret)
 class Activity(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False)
-    datetime = db.Column(db.String(30), nullable=False)
-    creator_id = db.Column(db.String(50), nullable=False)  # 新增創建者 ID
+    date = db.Column(db.String(30), nullable=False)
+    time = db.Column(db.String(30), nullable=False)
+    creator_id = db.Column(db.String(50), nullable=False)
     participants = db.relationship('Participant', backref='activity', lazy=True)
 
 
@@ -165,34 +166,23 @@ def create_activities_list_flex():
                 "text": activity.name,
                 "weight": "bold",
                 "size": "lg"
+            },
+            {
+                "type": "text",
+                "text": f"日期: {activity.date}",
+                "size": "sm"
+            },
+            {
+                "type": "text",
+                "text": f"時間: {activity.time}",
+                "size": "sm"
+            },
+            {
+                "type": "text",
+                "text": f"參加人數: {len(activity.participants)}",
+                "size": "sm"
             }
         ]
-
-        if activity.datetime:
-            datetime_parts = activity.datetime.split()
-            if len(datetime_parts) >= 2:
-                activity_info.extend([
-                    {
-                        "type": "text",
-                        "text": f"日期: {datetime_parts[0]}",
-                        "size": "sm"
-                    },
-                    {
-                        "type": "text",
-                        "text": f"時間: {datetime_parts[1]}",
-                        "size": "sm"
-                    }
-                ])
-            else:
-                logger.warning(f"日期時間格式不正確，副本ID: {activity.id}, 數值: {activity.datetime}")
-        else:
-            logger.warning(f"副本ID: {activity.id} 的日期時間為空")
-
-        activity_info.append({
-            "type": "text",
-            "text": f"參加人數: {len(activity.participants)}",
-            "size": "sm"
-        })
 
         # 按鈕列
         buttons = {
@@ -575,10 +565,18 @@ def handle_postback(event):
                     messaging_api.reply_message(request)
                     return
 
+                # 將日期時間字串轉換為 datetime 物件
+                dt_object = datetime.strptime(datetime_selected, '%Y-%m-%dT%H:%M')
+
+                # 提取日期和時間
+                date_selected = dt_object.strftime('%Y-%m-%d')
+                time_selected = dt_object.strftime('%H:%M')
+
                 # 建立新的副本
                 new_activity = Activity(
                     name=activity_name,
-                    datetime=datetime_selected,
+                    date=date_selected,
+                    time=time_selected,
                     creator_id=user_id
                 )
                 db.session.add(new_activity)
@@ -589,7 +587,7 @@ def handle_postback(event):
 
                 # 顯示成功訊息和副本列表
                 success_message = TextMessage(
-                    text=f"➜{activity_name}：副本建立成功！\n時間：{datetime_selected}")
+                    text=f"➜{activity_name}：副本建立成功！\n日期：{date_selected}\n時間：{time_selected}")
                 activities_list = create_activities_list_flex()
 
                 request = ReplyMessageRequest(
@@ -775,6 +773,7 @@ def handle_postback(event):
 # 修改初始化數據庫的函數
 def init_db():
     with app.app_context():
+        db.drop_all()  # 先刪除所有表格
         db.create_all()
         print("Database initialized")
 
