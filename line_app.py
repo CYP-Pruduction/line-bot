@@ -1,6 +1,4 @@
 # line_app.py
-# 副本管理 LINE Bot 應用程式
-# 使用 Flask 和 LINE Messaging API 開發的活動管理機器人
 from flask import Flask, request
 from flask_sqlalchemy import SQLAlchemy
 from linebot.v3 import WebhookHandler
@@ -17,68 +15,54 @@ from datetime import datetime
 import os
 import asyncio
 
-# 初始化 Flask 應用程式
 app = Flask(__name__)
 
 # 環境變數配置
-# 處理資料庫連線 URL，確保使用 PostgreSQL 協議
 DATABASE_URL = os.environ.get('DATABASE_URL')
 if DATABASE_URL and DATABASE_URL.startswith('postgres://'):
     DATABASE_URL = DATABASE_URL.replace('postgres://', 'postgresql://')
 
-# 配置資料庫連線
 app.config['SQLALCHEMY_DATABASE_URI'] = DATABASE_URL
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 
-# 配置日誌系統
-# 設定日誌級別和輸出格式，便於追蹤和除錯
 logging.basicConfig(
     level=logging.DEBUG,
     format='%(asctime)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
 
-# 從環境變數獲取 LINE Bot 驗證憑證
-# 這些憑證用於與 LINE Messaging API 進行安全通訊
+# LINE Bot 設定從環境變數獲取
 channel_access_token = os.environ.get('LINE_CHANNEL_ACCESS_TOKEN')
 channel_secret = os.environ.get('LINE_CHANNEL_SECRET')
 
-# 配置 LINE Bot 客戶端
 configuration = Configuration(access_token=channel_access_token)
 api_client = ApiClient(configuration)
 messaging_api = MessagingApi(api_client)
 handler = WebhookHandler(channel_secret)
 
-# 資料庫模型定義
-# 定義 Activity（副本）模型，用於儲存活動/副本資訊
+# Database Models
 class Activity(db.Model):
-    id = db.Column(db.Integer, primary_key=True)  # 唯一識別碼
-    name = db.Column(db.String(100), nullable=False) # 副本名稱
-    datetime = db.Column(db.String(30), nullable=False) # 副本日期時間
-    creator_id = db.Column(db.String(50), nullable=False)  # 創建者的 LINE User ID
-    participants = db.relationship('Participant', backref='activity', lazy=True) # 參與者關聯
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), nullable=False)
+    datetime = db.Column(db.String(30), nullable=False)
+    creator_id = db.Column(db.String(50), nullable=False)  # 新增創建者 ID
+    participants = db.relationship('Participant', backref='activity', lazy=True)
 
-# 定義 Participant（參與者）模型，用於儲存參與活動的用戶資訊
+
 class Participant(db.Model):
-    id = db.Column(db.Integer, primary_key=True) # 唯一識別碼
-    user_id = db.Column(db.String(50), nullable=False) # LINE User ID
-    user_name = db.Column(db.String(100)) # 用戶顯示名稱
-    activity_id = db.Column(db.Integer, db.ForeignKey('activity.id'), nullable=False) # 關聯的副本 ID
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.String(50), nullable=False)
+    user_name = db.Column(db.String(100))
+    activity_id = db.Column(db.Integer, db.ForeignKey('activity.id'), nullable=False)
 
 
-# 使用者狀態追蹤字典
-# 用於追蹤用戶在副本建立過程中的當前步驟
+# 使用者狀態追蹤
 user_states = {}
 
-# 非同步函數：獲取 LINE 用戶資料
-async def get_user_profile(user_id):
-    """
-    從 LINE 獲取用戶個人資料
 
-    :param user_id: LINE 用戶唯一識別碼
-    :return: 用戶顯示名稱，若發生錯誤則返回 "未知用戶"
-    """
+async def get_user_profile(user_id):
+    """獲取 LINE 用戶資料"""
     try:
         profile = await messaging_api.get_profile(user_id)
         return profile.display_name
@@ -86,14 +70,8 @@ async def get_user_profile(user_id):
         logger.error(f"Error getting user profile: {e}")
         return "未知用戶"
 
-# 輔助函數：執行非同步協程
 def run_async(coro):
-    """
-    協助執行非同步函數的輔助函數
-
-    :param coro: 要執行的非同步協程
-    :return: 協程執行結果
-    """
+    """協助執行非同步函數的輔助函數"""
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     try:
@@ -101,13 +79,8 @@ def run_async(coro):
     finally:
         loop.close()
 
-# 建立副本名稱輸入的 Flex 訊息
-def create_activity_name_input():
-    """
-    創建一個引導用戶輸入副本名稱的 Flex 訊息
 
-    :return: FlexMessage 物件
-    """
+def create_activity_name_input():
     flex_content = {
         "type": "bubble",
         "body": {
@@ -138,7 +111,7 @@ def create_activity_name_input():
         contents=FlexContainer.from_dict(flex_content)
     )
 
-# 建立日期時間選擇器的 Flex 訊息
+
 def create_datetime_picker_flex():
     flex_content = {
         "type": "bubble",
@@ -176,21 +149,13 @@ def create_datetime_picker_flex():
         contents=FlexContainer.from_dict(flex_content)
     )
 
-# 建立副本列表的 Flex 訊息
-def create_activities_list_flex():
-    """
-    創建顯示所有副本的 Flex 訊息列表
 
-    :return: FlexMessage 或 TextMessage 物件
-    """
-    # 查詢所有副本
+def create_activities_list_flex():
     activities = Activity.query.all()
 
-    # 如果沒有副本，返回提示訊息
     if not activities:
         return TextMessage(text="目前沒有任何副本")
 
-    # 建立副本列表的 Flex 訊息內容
     contents = []
     for activity in activities:
         # 副本資訊
@@ -285,7 +250,6 @@ def create_activities_list_flex():
             "contents": activity_info + [buttons]
         })
 
-    # 構建完整的 Flex 訊息
     flex_content = {
         "type": "bubble",
         "body": {
@@ -311,13 +275,9 @@ def create_activities_list_flex():
         contents=FlexContainer.from_dict(flex_content)
     )
 
-# LINE Webhook 回調路由
+
 @app.route("/callback", methods=['POST'])
 def callback():
-    """
-    處理來自 LINE 的 Webhook 回調
-    驗證簽名並觸發事件處理
-    """
     signature = request.headers['X-Line-Signature']
     body = request.get_data(as_text=True)
     try:
@@ -326,15 +286,105 @@ def callback():
         logger.error(f"Error: {e}")
     return 'OK'
 
-# 文字訊息事件處理器
+
 @handler.add(MessageEvent, message=TextMessageContent)
 def handle_text_message(event):
-    """
-    處理使用者發送的文字訊息
-    支援多種指令，包括創建副本、查看副本、刪除副本等
+    try:
+        user_id = event.source.user_id
+        text = event.message.text
 
-    :param event: LINE 訊息事件
-    """
+        if text == "刪除所有副本":
+            confirmation_message = FlexMessage(
+                alt_text="確認刪除所有副本？",
+                contents=FlexContainer.from_dict({
+                   "type": "bubble",
+                    "body": {
+                        "type": "box",
+                        "layout": "vertical",
+                         "contents": [
+                            {
+                                "type": "text",
+                                "text": "確認刪除所有副本？",
+                                "weight": "bold",
+                                "size": "xl",
+                                "align": "center"
+                            },
+                             {
+                                "type": "separator",
+                                "margin": "lg"
+                            },
+                            {
+                                "type": "box",
+                                "layout": "horizontal",
+                                "margin": "md",
+                                "spacing": "sm",
+                                "contents": [
+                                    {
+                                        "type": "button",
+                                        "style": "primary",
+                                        "height": "sm",
+                                         "action": {
+                                            "type": "postback",
+                                            "label": "是",
+                                            "data": "action=confirm_delete_all"
+                                            }
+                                    },
+                                    {
+                                         "type": "button",
+                                         "style": "secondary",
+                                         "height": "sm",
+                                         "action": {
+                                              "type": "postback",
+                                              "label": "否",
+                                              "data": "action=cancel_delete_all"
+                                          }
+                                    }
+                                ]
+                             }
+                         ]
+                     }
+                })
+            )
+            request = ReplyMessageRequest(
+                reply_token=event.reply_token,
+                messages=[confirmation_message]
+            )
+            messaging_api.reply_message(request)
+            return
+
+
+        if text.startswith("副本 "):
+            activity_name = text[3:].strip()
+            if activity_name:
+                user_states[user_id] = {
+                    'step': 'datetime',
+                    'name': activity_name
+                }
+                request = ReplyMessageRequest(
+                    reply_token=event.reply_token,
+                    messages=[create_datetime_picker_flex()]
+                )
+                messaging_api.reply_message(request)
+            else:
+                request = ReplyMessageRequest(
+                    reply_token=event.reply_token,
+                    messages=[TextMessage(text="請輸入副本名稱，例如：副本 副本")]
+                )
+                messaging_api.reply_message(request)
+
+        elif text == "副本":
+            request = ReplyMessageRequest(
+                reply_token=event.reply_token,
+                messages=[create_activities_list_flex()]
+            )
+            messaging_api.reply_message(request)
+
+    except Exception as e:
+        logger.error(f"Error: {e}")
+
+
+@handler.add(MessageEvent, message=TextMessageContent)
+def handle_text_message(event):
     try:
         user_id = event.source.user_id
         text = event.message.text
@@ -408,7 +458,7 @@ def handle_text_message(event):
                 "➜ 名單 - 查看報名名單\n"
                 "➜ 移除 - 刪除副本(限創建者)\n"
                 "➜ 刪除所有副本 - 清空所有副本列表 (需確認)\n"
-                "➜ + [副本名稱] [人員名稱] - 新增特定人員到副本\n"
+                "➜ + [副本名稱] [人員名稱] - 新增特定人員到副本"
                 "➜ - [副本名稱] [人員名稱] - 於副本名單中刪除特定人員"
             )
             request = ReplyMessageRequest(
@@ -417,7 +467,6 @@ def handle_text_message(event):
             )
             messaging_api.reply_message(request)
 
-        # 刪除所有副本確認流程
         elif text == "刪除所有副本":
             confirmation_message = FlexMessage(
                 alt_text="確認刪除所有副本？",
@@ -475,8 +524,8 @@ def handle_text_message(event):
                 messages=[confirmation_message]
             )
             messaging_api.reply_message(request)
+            return
 
-        # 移除特定成員
         elif text.startswith("➜ - "):
             parts = text.split(" ")
             if len(parts) == 4:  # 確保指令格式正確
@@ -520,7 +569,6 @@ def handle_text_message(event):
                 )
                 messaging_api.reply_message(request)
 
-        # 建立新副本流程
         elif text.startswith("副本 "):
             activity_name = text[3:].strip()
             if activity_name:
@@ -540,7 +588,6 @@ def handle_text_message(event):
                 )
                 messaging_api.reply_message(request)
 
-        # 列出所有副本
         elif text == "副本":
             request = ReplyMessageRequest(
                 reply_token=event.reply_token,
@@ -551,15 +598,9 @@ def handle_text_message(event):
     except Exception as e:
         logger.error(f"Error: {e}")
 
-# Postback 事件處理器
+
 @handler.add(PostbackEvent)
 def handle_postback(event):
-    """
-    處理 LINE 互動按鈕的回調事件
-    支援報名、取消報名、查看參與者、刪除副本等功能
-
-    :param event: LINE Postback 事件
-    """
     try:
         user_id = event.source.user_id
         data = event.postback.data
@@ -607,7 +648,6 @@ def handle_postback(event):
 
         # 報名功能
         elif "action=join_activity" in data:
-            # 允許用戶報名特定副本
             activity_id = int(data.split('&id=')[1])
             activity = Activity.query.get(activity_id)
 
@@ -652,7 +692,6 @@ def handle_postback(event):
 
         # 取消報名功能
         elif "action=cancel_join" in data:
-            # 允許用戶取消報名特定副本
             activity_id = int(data.split('&id=')[1])
             activity = Activity.query.get(activity_id)
 
@@ -689,9 +728,9 @@ def handle_postback(event):
             )
             messaging_api.reply_message(request)
 
-        # 刪除副本功能
+        # 保留其他原有的 postback 處理邏輯
         elif "action=delete_activity" in data:
-            # 允許創建者刪除特定副本
+            # (原有的刪除副本邏輯)
             activity_id = int(data.split('&id=')[1])
             activity = Activity.query.get(activity_id)
 
@@ -716,9 +755,9 @@ def handle_postback(event):
                 )
                 messaging_api.reply_message(request)
 
-        # 查看參與者名單
+        # 其他原有的 postback 處理（如查看參與者、刪除所有副本等）
         elif "action=view_participants" in data:
-            # 顯示特定副本的參與者名單
+            # (原有的查看參與者邏輯)
             activity_id = int(data.split('&id=')[1])
             activity = Activity.query.get(activity_id)
 
@@ -741,9 +780,8 @@ def handle_postback(event):
                 )
                 messaging_api.reply_message(request)
 
-        # 確認/取消刪除所有副本
+        # 刪除所有副本相關的 postback
         elif "action=confirm_delete_all" in data:
-            # 刪除所有副本和參與者記錄
             Participant.query.delete()
             Activity.query.delete()
             db.session.commit()
@@ -769,22 +807,12 @@ def handle_postback(event):
 
 # 修改初始化數據庫的函數
 def init_db():
-    """
-    初始化應用程式資料庫
-    創建所有定義的資料庫表格
-    """
     with app.app_context():
         db.create_all()
         print("Database initialized")
 
-# 主程式入口
 if __name__ == "__main__":
-    # 初始化資料庫
     with app.app_context():
        init_db()
-
-    # 從環境變數獲取運行端口，預設為 5000
     port = int(os.environ.get('PORT', 5000))
-
-    # 啟動 Flask 應用程式
     app.run(host='0.0.0.0', port=port)
