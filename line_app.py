@@ -517,81 +517,84 @@ def handle_postback(event):
             datetime_selected = event.postback.params.get('datetime')
             logger.info(f"Received datetime_selected: {datetime_selected}")
 
-            # 確認用戶狀態和日期時間是否存在
-            logger.info(f"Current user_states: {user_states}")
-            if user_id in user_states and user_states[user_id].get('step') == 'datetime' and datetime_selected:
-                activity_name = user_states[user_id].get('name')
-                logger.info(f"Creating activity with name: {activity_name} and datetime: {datetime_selected}")
-
-                if activity_name:
-                    # 檢查是否已存在相同名稱的副本
-                    try:
-                        existing_activity = Activity.query.filter_by(name=activity_name).first()
-                        if existing_activity:
-                            logger.info(f"Activity with name {activity_name} already exists")
-                            response_text = f"已存在名為 {activity_name} 的副本"
-                            request = ReplyMessageRequest(
-                                reply_token=event.reply_token,
-                                messages=[TextMessage(text=response_text)]
-                            )
-                        else:
-                            # 建立新的副本
-                            try:
-                                with app.app_context():
-                                    new_activity = Activity(
-                                        name=activity_name,
-                                        datetime=datetime_selected,
-                                        creator_id=user_id
-                                    )
-                                    logger.info(f"Created new activity object: {new_activity}")
-
-                                    db.session.add(new_activity)
-                                    logger.info("Added new activity to session")
-
-                                    db.session.commit()
-                                    logger.info("Successfully committed to database")
-
-                                    # 清除用戶狀態
-                                    del user_states[user_id]
-
-                                    # 顯示成功訊息和副本列表
-                                    success_message = TextMessage(
-                                        text=f"➜{activity_name}：副本建立成功！\n時間：{datetime_selected}")
-                                    activities_list = create_activities_list_flex()
-
-                                    request = ReplyMessageRequest(
-                                        reply_token=event.reply_token,
-                                        messages=[success_message, activities_list]
-                                    )
-                            except Exception as e:
-                                logger.error(f"Database error creating activity: {str(e)}", exc_info=True)
-                                db.session.rollback()
-                                request = ReplyMessageRequest(
-                                    reply_token=event.reply_token,
-                                    messages=[TextMessage(text=f"建立副本時發生資料庫錯誤：{str(e)}")]
-                                )
-                    except Exception as e:
-                        logger.error(f"Error checking existing activity: {str(e)}", exc_info=True)
-                        request = ReplyMessageRequest(
-                            reply_token=event.reply_token,
-                            messages=[TextMessage(text="檢查副本時發生錯誤，請稍後再試。")]
-                        )
-
-                    messaging_api.reply_message(request)
-                else:
-                    logger.warning("Activity name is empty or invalid")
-                    request = ReplyMessageRequest(
-                        reply_token=event.reply_token,
-                        messages=[TextMessage(text="副本名稱無效，請重新輸入")]
-                    )
-                    messaging_api.reply_message(request)
-            else:
-                logger.warning(f"Invalid user state or datetime. User ID: {user_id}")
+            # 檢查用戶狀態
+            if user_id not in user_states:
+                logger.warning(f"No user state found for user_id: {user_id}")
                 request = ReplyMessageRequest(
                     reply_token=event.reply_token,
-                    messages=[TextMessage(text="無法建立副本，請重新開始")]
+                    messages=[TextMessage(text="請重新開始建立副本流程")]
                 )
                 messaging_api.reply_message(request)
+                return
+
+            # 確認用戶狀態和活動名稱
+            user_state = user_states.get(user_id)
+            if not user_state or 'name' not in user_state:
+                logger.warning(f"Invalid user state for user_id: {user_id}")
+                request = ReplyMessageRequest(
+                    reply_token=event.reply_token,
+                    messages=[TextMessage(text="請重新開始建立副本流程")]
+                )
+                messaging_api.reply_message(request)
+                return
+
+            activity_name = user_state.get('name')
+
+            # 檢查活動名稱是否存在
+            if not activity_name:
+                logger.warning("Activity name is missing")
+                request = ReplyMessageRequest(
+                    reply_token=event.reply_token,
+                    messages=[TextMessage(text="副本名稱無效，請重新輸入")]
+                )
+                messaging_api.reply_message(request)
+                return
+
+            try:
+                # 檢查是否已存在相同名稱的副本
+                existing_activity = Activity.query.filter_by(name=activity_name).first()
+                if existing_activity:
+                    logger.info(f"Activity with name {activity_name} already exists")
+                    response_text = f"已存在名為 {activity_name} 的副本"
+                    request = ReplyMessageRequest(
+                        reply_token=event.reply_token,
+                        messages=[TextMessage(text=response_text)]
+                    )
+                    messaging_api.reply_message(request)
+                    return
+
+                # 建立新的副本
+                new_activity = Activity(
+                    name=activity_name,
+                    datetime=datetime_selected,
+                    creator_id=user_id
+                )
+                db.session.add(new_activity)
+                db.session.commit()
+
+                # 清除用戶狀態
+                del user_states[user_id]
+
+                # 顯示成功訊息和副本列表
+                success_message = TextMessage(
+                    text=f"➜{activity_name}：副本建立成功！\n時間：{datetime_selected}")
+                activities_list = create_activities_list_flex()
+
+                request = ReplyMessageRequest(
+                    reply_token=event.reply_token,
+                    messages=[success_message, activities_list]
+                )
+                messaging_api.reply_message(request)
+
+            except Exception as e:
+                logger.error(f"Database error creating activity: {str(e)}", exc_info=True)
+                db.session.rollback()
+                request = ReplyMessageRequest(
+                    reply_token=event.reply_token,
+                    messages=[TextMessage(text="建立副本時發生錯誤，請稍後再試")]
+                )
+                messaging_api.reply_message(request)
+                return
 
         # 報名功能
         elif "action=join_activity" in data:
