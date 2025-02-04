@@ -165,23 +165,34 @@ def create_activities_list_flex():
                 "text": activity.name,
                 "weight": "bold",
                 "size": "lg"
-            },
-            {
-                "type": "text",
-                "text": f"日期: {activity.datetime.split()[0]}",
-                "size": "sm"
-            },
-            {
-                "type": "text",
-                "text": f"時間: {activity.datetime.split()[1]}",
-                "size": "sm"
-            },
-            {
-                "type": "text",
-                "text": f"參加人數: {len(activity.participants)}",
-                "size": "sm"
             }
         ]
+
+        if activity.datetime:
+            datetime_parts = activity.datetime.split()
+            if len(datetime_parts) >= 2:
+                activity_info.extend([
+                    {
+                        "type": "text",
+                        "text": f"日期: {datetime_parts[0]}",
+                        "size": "sm"
+                    },
+                    {
+                        "type": "text",
+                        "text": f"時間: {datetime_parts[1]}",
+                        "size": "sm"
+                    }
+                ])
+            else:
+                logger.warning(f"日期時間格式不正確，副本ID: {activity.id}, 數值: {activity.datetime}")
+        else:
+            logger.warning(f"副本ID: {activity.id} 的日期時間為空")
+
+        activity_info.append({
+            "type": "text",
+            "text": f"參加人數: {len(activity.participants)}",
+            "size": "sm"
+        })
 
         # 按鈕列
         buttons = {
@@ -256,18 +267,18 @@ def create_activities_list_flex():
             "type": "box",
             "layout": "vertical",
             "contents": [
-                {
-                    "type": "text",
-                    "text": "副本列表",
-                    "weight": "bold",
-                    "size": "xl",
-                    "color": "#1DB446"
-                },
-                {
-                    "type": "separator",
-                    "margin": "lg"
-                }
-            ] + contents
+                            {
+                                "type": "text",
+                                "text": "副本列表",
+                                "weight": "bold",
+                                "size": "xl",
+                                "color": "#1DB446"
+                            },
+                            {
+                                "type": "separator",
+                                "margin": "lg"
+                            }
+                        ] + contents
         }
     }
     return FlexMessage(
@@ -518,8 +529,9 @@ def handle_postback(event):
             logger.info(f"Received datetime_selected: {datetime_selected}")
 
             # 檢查用戶狀態
-            if user_id not in user_states:
-                logger.warning(f"No user state found for user_id: {user_id}")
+            user_state = user_states.get(user_id)
+            if not user_state:
+                logger.error(f"找不到使用者 {user_id} 的狀態")
                 request = ReplyMessageRequest(
                     reply_token=event.reply_token,
                     messages=[TextMessage(text="請重新開始建立副本流程")]
@@ -528,9 +540,9 @@ def handle_postback(event):
                 return
 
             # 確認用戶狀態和活動名稱
-            user_state = user_states.get(user_id)
+
             if not user_state or 'name' not in user_state:
-                logger.warning(f"Invalid user state for user_id: {user_id}")
+                logger.error(f"使用者 {user_id} 的狀態無效")
                 request = ReplyMessageRequest(
                     reply_token=event.reply_token,
                     messages=[TextMessage(text="請重新開始建立副本流程")]
@@ -542,7 +554,7 @@ def handle_postback(event):
 
             # 檢查活動名稱是否存在
             if not activity_name:
-                logger.warning("Activity name is missing")
+                logger.error("活動名稱遺失")
                 request = ReplyMessageRequest(
                     reply_token=event.reply_token,
                     messages=[TextMessage(text="副本名稱無效，請重新輸入")]
@@ -554,7 +566,7 @@ def handle_postback(event):
                 # 檢查是否已存在相同名稱的副本
                 existing_activity = Activity.query.filter_by(name=activity_name).first()
                 if existing_activity:
-                    logger.info(f"Activity with name {activity_name} already exists")
+                    logger.info(f"名為 {activity_name} 的副本已存在")
                     response_text = f"已存在名為 {activity_name} 的副本"
                     request = ReplyMessageRequest(
                         reply_token=event.reply_token,
@@ -587,7 +599,7 @@ def handle_postback(event):
                 messaging_api.reply_message(request)
 
             except Exception as e:
-                logger.error(f"Database error creating activity: {str(e)}", exc_info=True)
+                logger.error(f"建立副本時發生資料庫錯誤：{str(e)}", exc_info=True)
                 db.session.rollback()
                 request = ReplyMessageRequest(
                     reply_token=event.reply_token,
@@ -750,7 +762,7 @@ def handle_postback(event):
             )
             messaging_api.reply_message(request)
     except Exception as e:
-        logger.error(f"Unexpected error in handle_postback: {str(e)}", exc_info=True)
+        logger.error(f"handle_postback 發生未預期錯誤：{str(e)}", exc_info=True)
         try:
             request = ReplyMessageRequest(
                 reply_token=event.reply_token,
@@ -758,8 +770,7 @@ def handle_postback(event):
             )
             messaging_api.reply_message(request)
         except Exception as reply_error:
-            logger.error(f"Error sending error message: {str(reply_error)}")
-
+            logger.error(f"發送錯誤訊息時發生錯誤：{str(reply_error)}")
 
 # 修改初始化數據庫的函數
 def init_db():
