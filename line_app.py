@@ -585,16 +585,13 @@ def handle_postback(event):
                 # 清除用戶狀態
                 del user_states[user_id]
 
-                # 顯示成功訊息和副本列表
-                success_message = TextMessage(
-                    text=f"➜{activity_name}：副本建立成功！\n日期：{date_selected}\n時間：{time_selected}")
+                # 顯示副本列表
                 activities_list = create_activities_list_flex()
 
                 request = ReplyMessageRequest(
                     reply_token=event.reply_token,
-                    messages=[success_message, activities_list]
+                    messages=[activities_list]
                 )
-                messaging_api.reply_message(request)
 
             except Exception as e:
                 logger.error(f"建立副本時發生資料庫錯誤：{str(e)}", exc_info=True)
