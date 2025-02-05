@@ -382,7 +382,8 @@ def handle_text_message(event):
 
                         response_text = (
                             f"➜{activity_name}：{new_participant_name} 已成功報名\n"
-                            f"副本時間：{activity.datetime}\n"
+                            f"日期：{activity.date}\n"
+                            f"時間：{activity.time}\n"
                             f"目前參加人數：{len(activity.participants)}"
                         )
 
@@ -638,7 +639,8 @@ def handle_postback(event):
 
                     response_text = (
                         f"➜{activity.name}：{user_name} 已成功報名\n"
-                        f"副本時間：{activity.datetime}\n"
+                        f"日期：{activity.date}\n"
+                        f"時間：{activity.time}\n"
                         f"目前參加人數：{len(activity.participants)}"
                     )
 
@@ -726,7 +728,8 @@ def handle_postback(event):
 
                 response_text = (
                     f"➜{activity.name} 報名名單\n"
-                    f"副本時間：{activity.datetime}\n"
+                    f"日期：{activity.date}\n"
+                    f"時間：{activity.time}\n"
                     f"參加人數：{len(activity.participants)}人\n"
                     f"-----------------\n"
                     f"{participant_list}"
