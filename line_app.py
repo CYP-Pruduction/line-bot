@@ -431,11 +431,12 @@ def handle_text_message(event):
             messaging_api.reply_message(request)
 
         # 處理刪除特定人員指令
-        elif text.startswith("➜ - "):
-            parts = text.split(" ")
-            if len(parts) == 4:
-                activity_name = parts[2]
-                participant_name = parts[3]
+        elif text.startswith("- "):
+            command = text[2:].strip()
+            parts = command.split(" ")
+            if len(parts) == 2:
+                activity_name = parts[0]
+                participant_name = parts[1]
 
                 activity = Activity.query.filter_by(name=activity_name).first()
 
